@@ -1,0 +1,61 @@
+
+body {
+	font-family: "Courier New";
+}
+
+.login_btn a {
+	text-decoration: none;
+	color: initial;
+	background-color: #8AAEFF;
+	display: block;
+	text-align: center;
+	height: 50px;
+	width: 128px;
+	margin: 200px auto;
+	vertical-align: middle;
+	position: relative;
+	padding-top: 30px;
+	padding-left: 30px;
+	padding-right: 30px;
+	padding-bottom: auto;
+	border-radius: 10px;
+
+}
+
+.login_btn a:hover {
+	background-color: #D0DFFF;
+	color: gray;
+}
+
+.login_form {
+	display: block;
+	background-color: #99b1ff;
+	margin: 100px auto;
+	width: 300px;
+	height: 220px;
+	position: relative;
+	border-radius: 10px;
+}
+
+.login_form .text_field {
+	margin: 10px 10px;
+	padding: 10px;
+}
+
+.text_field .username, .text_field .password {
+	border-radius: 5px;
+	background-color: #f2f5ff;
+	border: 0px;
+	margin: 5px;
+	height: 30px;
+}
+
+.login_form .button {
+	width: 100px;
+	height: 30px;
+	margin-left: 25px;
+	text-align: center;
+	background-color: #f2f5ff;
+	border-radius: 5px;
+	border: 0;
+}

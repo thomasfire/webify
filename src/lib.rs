@@ -7,3 +7,4 @@ pub mod config;
 pub mod io_tools;
 pub mod server;
 pub mod database;
+pub mod dashboard;

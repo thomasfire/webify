@@ -1,11 +1,11 @@
 extern crate chrono;
-
-
+extern crate crypto;
 extern crate serde_json;
 
 use std::error::Error;
 
 use chrono::NaiveDateTime;
+use diesel::connection::SimpleConnection;
 #[cfg(test)]
 use diesel::debug_query;
 use diesel::insert_into;
@@ -16,7 +16,8 @@ use diesel::sqlite::Sqlite;
 
 
 
-use diesel::connection::SimpleConnection;
+use self::crypto::digest::Digest;
+use self::crypto::sha2::Sha256;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -26,7 +27,9 @@ mod schema {
             id -> Integer,
             name -> Text,
             password -> Text,
+            cookie -> Nullable<Text>,
             groups -> Nullable<Text>,
+            wrong_attempts -> Nullable<Integer>,
         }
     }
     table! {
@@ -46,13 +49,15 @@ struct User {
     id: u32,
     name: String,
     password: String,
+    cookie: Option<String>,
     groups: Option<String>,
+    wrong_attempts: Option<u32>,
 }
 
 
 #[derive(Deserialize, Insertable)]
 #[table_name = "users"]
-pub struct UserForm<'a> {
+pub struct UserAdd<'a> {
     name: &'a str,
     password: &'a str,
     groups: Option<&'a str>,
@@ -70,6 +75,22 @@ struct History {
 #[table_name = "history"]
 pub struct HistoryForm<'a> {
     get_query: &'a str
+}
+
+fn get_hash(text: &str) -> String {
+    let mut hasher = Sha256::new();
+
+    hasher.input_str(text);
+    for _x in 0..512 {
+        let hex = hasher.result_str();
+        hasher.input_str(&hex);
+    }
+
+    return hasher.result_str();
+}
+
+pub fn insert_user(username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
+
 }
 
 pub fn get_connection(db_config: String) -> Result<Pool, String> {
@@ -102,8 +123,10 @@ pub fn init_db(db_config: String) -> Result<(), String> {
     CREATE TABLE users (
         id INTEGER primary key,
         name TEXT not null,
-        password TEXT not null,
-        groups TEXT null
+        password TEXT not null,,
+        cookie TEXT null,
+        groups TEXT null,
+        wrong_attempts INTEGER null
     );
     CREATE TABLE history (
         id INTEGER primary key,
