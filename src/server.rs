@@ -13,6 +13,7 @@ use crate::config::Config;
 use crate::io_tools::read_str;
 
 use self::actix_web::Error;
+use crate::dashboard::dashboard_page;
 
 fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     let styles_str = match read_str("styles/styles.css") {
@@ -126,7 +127,7 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/").to_async(main_page))
             .service(web::resource("/login").to_async(login_page))
             .service(web::resource("/get_logged_in").route(web::post().to_async(login_handler)))
-            .service(web::resource("/dashboard/{device}").to_async(login_page))
+            .service(web::resource("/dashboard/{device}").to_async(dashboard_page))
             .service(web::resource("/styles.css").to_async(get_styles))
             .service(web::resource("/lite.css").to_async(get_lite_styles))
     )
