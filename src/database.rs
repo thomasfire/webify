@@ -36,7 +36,7 @@ fn get_hash(text: &str) -> String {
     return hasher.result_str();
 }
 
-pub fn get_user_groups(pool: Pool, username: &str) -> Result<Vec<String>, String> {
+pub fn get_user_groups(pool: &Pool, username: &str) -> Result<Vec<String>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -60,7 +60,7 @@ pub fn get_user_groups(pool: Pool, username: &str) -> Result<Vec<String>, String
 }
 
 
-pub fn get_user_from_cookie(pool: Pool, cookie: &str) -> Result<String, String> {
+pub fn get_user_from_cookie(pool: &Pool, cookie: &str) -> Result<String, String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -78,13 +78,13 @@ pub fn get_user_from_cookie(pool: Pool, cookie: &str) -> Result<String, String> 
     }
 }
 
-pub fn get_user_devices(pool: Pool, devices_map: HashMap<String, String>, username: &str) -> Result<Vec<String>, String> {
+pub fn get_user_devices(pool: &Pool, devices_map: &HashMap<String, String>, username: &str) -> Result<Vec<String>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
             conn
         }
-        Err(err) => return Err(format!("Error on init_db: {:?}", err)),
+        Err(err) => return Err(format!("Error on get_user_devices: {:?}", err)),
     };
 
     let res: Option<String> = match users::table.filter(users::columns::name.eq(username)).select(users::columns::groups).first(&connection) {
@@ -104,7 +104,7 @@ pub fn get_user_devices(pool: Pool, devices_map: HashMap<String, String>, userna
     }
 }
 
-pub fn insert_user(pool: Pool, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
+pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -126,7 +126,7 @@ pub fn insert_user(pool: Pool, username: &str, password: &str, groups: Option<&s
     }
 }
 
-pub fn assign_cookie(pool: Pool, username: &str, cookie: &str) -> Result<(), String> {
+pub fn assign_cookie(pool: &Pool, username: &str, cookie: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -143,7 +143,7 @@ pub fn assign_cookie(pool: Pool, username: &str, cookie: &str) -> Result<(), Str
     }
 }
 
-pub fn has_access(pool: Pool, username: &str, group_name: &str) -> Result<bool, String> {
+pub fn has_access(pool: &Pool, username: &str, group_name: &str) -> Result<bool, String> {
     let user_groups = match get_user_groups(pool, username) {
         Ok(data) => data,
         Err(err) => return Err(format!("Error on has_access on getting user devices: {:?}", err))
@@ -155,7 +155,7 @@ pub fn has_access(pool: Pool, username: &str, group_name: &str) -> Result<bool, 
     Ok(false)
 }
 
-pub fn on_init(pool: Pool) -> Result<HashMap<String, String>, String> {
+pub fn on_init(pool: &Pool) -> Result<HashMap<String, String>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -181,7 +181,7 @@ pub fn on_init(pool: Pool) -> Result<HashMap<String, String>, String> {
     Ok(devices_map)
 }
 
-pub fn get_connection(db_config: String) -> Result<Pool, String> {
+pub fn get_connection(db_config: &String) -> Result<Pool, String> {
     let manager = ConnectionManager::<SqliteConnection>::new(db_config);
     match Pool::builder().build(manager) {
         Ok(pool) => Ok(pool),
@@ -189,7 +189,7 @@ pub fn get_connection(db_config: String) -> Result<Pool, String> {
     }
 }
 
-pub fn init_db(db_config: String) -> Result<(), String> {
+pub fn init_db(db_config: &String) -> Result<(), String> {
     let r_pool = get_connection(db_config);
     let pool = match r_pool {
         Ok(conn) => {
