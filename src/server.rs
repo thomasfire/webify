@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::io_tools::read_str;
 
 use self::actix_web::Error;
-use crate::dashboard::{dashboard_page, DashBoard};
+use crate::dashboard::{dashboard_page, DashBoard, QCommand, dashboard_page_req};
 use crate::database::{validate_user, get_random_token, assign_cookie};
 use std::collections::HashMap;
 
@@ -162,8 +162,6 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
     //let dashboarder = ds.dashboard_pager;
 
     match HttpServer::new( move || {
-
-
         App::new()
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
@@ -177,6 +175,7 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/").to_async(main_page))
             .service(web::resource("/login").to_async(login_page))
             .service(web::resource("/get_logged_in").route(web::post().to_async(login_handler)))
+            .service(web::resource("/dashboard/{device}").route(web::post().to_async(dashboard_page_req)))
             .service(web::resource("/dashboard/{device}").to_async(dashboard_page))
             .service(web::resource("/styles.css").to_async(get_styles))
             .service(web::resource("/lite.css").to_async(get_lite_styles))

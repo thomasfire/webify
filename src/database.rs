@@ -282,10 +282,10 @@ pub fn assign_cookie(pool: &Pool, username: &str, cookie: &str) -> Result<(), St
     }
 }
 
-pub fn has_access(pool: &Pool, username: &str, group_name: &str) -> Result<bool, String> {
+pub fn has_access_to_group(pool: &Pool, username: &str, group_name: &str) -> Result<bool, String> {
     let user_groups = match get_user_groups(pool, username) {
         Ok(data) => data,
-        Err(err) => return Err(format!("Error on has_access on getting user devices: {:?}", err))
+        Err(err) => return Err(format!("Error on has_access on getting user groups: {:?}", err))
     };
 
     if user_groups.contains(&group_name.to_string()) {
@@ -293,6 +293,19 @@ pub fn has_access(pool: &Pool, username: &str, group_name: &str) -> Result<bool,
     }
     Ok(false)
 }
+
+pub fn has_access_to_device(pool: &Pool, dev_map: &HashMap<String, String>, username: &str, device: &str) -> Result<bool, String> {
+    let user_dev = match get_user_devices(pool, dev_map, username) {
+        Ok(data) => data,
+        Err(err) => return Err(format!("Error on has_access on getting user devices: {:?}", err))
+    };
+
+    if user_dev.contains(&device.to_string()) {
+        return Ok(true);
+    }
+    Ok(false)
+}
+
 
 pub fn validate_user(pool: &Pool, username: &str, password: &str) -> Result<bool, String> {
     let connection = match pool.get() {

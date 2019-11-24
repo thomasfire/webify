@@ -4,16 +4,18 @@ use diesel::r2d2::ConnectionManager;
 
 use crate::database::{get_all_users, get_all_history, get_all_groups, insert_user, update_user_pass, update_user_group, insert_group, update_group};
 use crate::models::LineWebify;
+use crate::dashboard::QCommand;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
+#[derive(Clone)]
 pub struct RootDev {
     db_pool: Pool
 }
 
 impl RootDev {
-    pub fn new(db: Pool) -> RootDev {
-        RootDev { db_pool: db }
+    pub fn new(db: &Pool) -> RootDev {
+        RootDev { db_pool: db.clone() }
     }
 
     fn read_users(&self) -> Result<String, String> {
@@ -88,7 +90,7 @@ impl RootDev {
     }
 
     fn insert_new_user(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("::").map(|x| x.to_string()).collect();
+        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
         let name = match data.get(0) {
             Some(d) => d,
             None => return Err(format!("Error on inserting users: invalid syntax: couldn't find username"))
@@ -107,7 +109,7 @@ impl RootDev {
     }
 
     fn update_user_pass(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("::").map(|x| x.to_string()).collect();
+        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
         let name = match data.get(0) {
             Some(d) => d,
             None => return Err(format!("Error on updating users pass: invalid syntax: couldn't find username"))
@@ -125,7 +127,7 @@ impl RootDev {
     }
 
     fn update_user_group(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("::").map(|x| x.to_string()).collect();
+        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
         let name = match data.get(0) {
             Some(d) => d,
             None => return Err(format!("Error on updating users group: invalid syntax: couldn't find username"))
@@ -143,7 +145,7 @@ impl RootDev {
     }
 
     fn insert_new_group(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("::").map(|x| x.to_string()).collect();
+        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
         let group = match data.get(0) {
             Some(d) => d,
             None => return Err(format!("Error on insert_new_group: invalid syntax: couldn't find group"))
@@ -162,7 +164,7 @@ impl RootDev {
 
 
     fn update_group(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("::").map(|x| x.to_string()).collect();
+        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
         let group = match data.get(0) {
             Some(d) => d,
             None => return Err(format!("Error on update_group: invalid syntax: couldn't find group"))
@@ -178,20 +180,16 @@ impl RootDev {
             Err(e) => Err(format!("Error on update_group: {}", e))
         }
     }
-
 }
 
 
 impl DeviceRead for RootDev {
-    fn read_data(&self, query: &str) -> Result<String, String> {
-        if query.len() < 8 {
-            return Err("Command is too short".to_string());
-        }
-        let command = &query[0..8];
+    fn read_data(&self, query: &QCommand) -> Result<String, String> {
+        let command = query.command.as_str();
         match command {
-            "ureadall" => self.read_users(),
-            "hreadall" => self.read_groups(),
-            "greadall" => self.read_history(),
+            "read_all_users" => self.read_users(),
+            "read_all_hist" => self.read_groups(),
+            "read_all_groups" => self.read_history(),
             _ => Err(format!("Unknown command"))
         }
     }
@@ -202,18 +200,32 @@ impl DeviceRead for RootDev {
 }
 
 impl DeviceWrite for RootDev {
-    fn write_data(&mut self, query: &str) -> Result<String, String> {
-        if query.len() <= 9 {
-            return Err("Command is too short".to_string());
-        }
-        let command = &query[0..9];
+    fn write_data(&self, query: &QCommand) -> Result<String, String> {
+        let command = query.command.as_str();
         match command {
-            "uwritenew" => self.insert_new_user(&query[9..]),
-            "uupdpsswd" => self.update_user_pass(&query[9..]),
-            "uupdgroup" => self.update_user_group(&query[9..]),
-            "gwritenew" => self.insert_new_group(&query[9..]),
-            "gupdgroup" => self.update_group(&query[9..]),
+            "add_user" => self.insert_new_user(query.payload.as_str()),
+            "update_user_password" => self.update_user_pass(query.payload.as_str()),
+            "update_user_groups" => self.update_user_group(query.payload.as_str()),
+            "add_group" => self.insert_new_group(query.payload.as_str()),
+            "update_group" => self.update_group(query.payload.as_str()),
             _ => Err(format!("Unknown command"))
         }
+    }
+}
+
+
+impl DeviceRequest for RootDev {
+    fn request_query(&self, query: &QCommand) -> Result<String, String> {
+        unimplemented!()
+    }
+}
+
+impl DeviceConfirm for RootDev {
+    fn confirm_query(&self, query: &QCommand) -> Result<String, String> {
+        unimplemented!()
+    }
+
+    fn dismiss_query(&self, query: &QCommand) -> Result<String, String> {
+        unimplemented!()
     }
 }
