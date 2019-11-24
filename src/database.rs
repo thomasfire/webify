@@ -1,8 +1,11 @@
 extern crate chrono;
 extern crate crypto;
 extern crate serde_json;
+extern crate rand;
 
 use std::collections::HashMap;
+
+use rand::random;
 use std::error::Error;
 
 use chrono::NaiveDateTime;
@@ -14,8 +17,9 @@ use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 #[cfg(test)]
 use diesel::sqlite::Sqlite;
+use diesel::result::Error as dError;
 
-use crate::models::{Groups, UserAdd};
+use crate::models::{Groups, UserAdd, User};
 use crate::schema::*;
 
 use self::crypto::digest::Digest;
@@ -25,15 +29,18 @@ type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 
 fn get_hash(text: &str) -> String {
-    let mut hasher = Sha256::new();
-
-    hasher.input_str(text);
+    let mut buff_str = text.to_string();
     for _x in 0..512 {
-        let hex = hasher.result_str();
-        hasher.input_str(&hex);
+        let mut hasher = Sha256::new();
+        hasher.input_str(&buff_str);
+        buff_str = hasher.result_str()
     }
 
-    return hasher.result_str();
+    return buff_str;
+}
+
+pub fn get_random_token() -> String {
+    get_hash(&(0..32).map(|_| random::<char>()).collect::<String>())
 }
 
 pub fn get_user_groups(pool: &Pool, username: &str) -> Result<Vec<String>, String> {
@@ -114,7 +121,7 @@ pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&
     };
     let new_user = UserAdd {
         name: username,
-        password,
+        password: &get_hash(&password),
         groups,
     };
 
@@ -154,6 +161,61 @@ pub fn has_access(pool: &Pool, username: &str, group_name: &str) -> Result<bool,
     }
     Ok(false)
 }
+
+pub fn validate_user(pool: &Pool, username: &str, password: &str) -> Result<bool, String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on validate_user: {:?}", err)),
+    };
+
+    let (b_id, b_password, b_wrongs) = match users::table.filter(users::columns::name.eq(username))
+        .select((users::columns::id, users::columns::password, users::columns::wrong_attempts))
+        .first::<(i32, String, Option<i32>)>(&connection) {
+        Ok(d) => d,
+        Err(e) => {
+            if e == dError::NotFound {
+                return Ok(false);
+            }
+            return Err(format!("Error on validating user: {:?}", e));
+        }
+    };
+
+    let wrongs = match b_wrongs {
+        Some(d) => d,
+        None => 0,
+    };
+
+    if wrongs >= 10 {
+        return Ok(false);
+    }
+
+    if b_password == get_hash(password) {
+        match diesel::update(users::table.filter(users::columns::id.eq(b_id)))
+            .set(users::columns::wrong_attempts.eq(0))
+            .execute(&connection) {
+            Ok(_) => return Ok(true),
+            Err(e) => {
+                eprintln!("Error on resetting attempts: {:?}", e);
+                return Err(format!("Error on resetting attempts: {:?}", e));
+            }
+        }
+    }
+
+
+    match diesel::update(users::table.filter(users::columns::id.eq(b_id)))
+        .set(users::columns::wrong_attempts.eq(wrongs + 1))
+        .execute(&connection) {
+        Ok(_) => return Ok(false),
+        Err(e) => {
+            eprintln!("Error on resetting attempts: {:?}", e);
+            return Err(format!("Error on resetting attempts: {:?}", e));
+        }
+    }
+}
+
 
 pub fn on_init(pool: &Pool) -> Result<HashMap<String, String>, String> {
     let connection = match pool.get() {

@@ -13,7 +13,9 @@ use crate::config::Config;
 use crate::io_tools::read_str;
 
 use self::actix_web::Error;
-use crate::dashboard::dashboard_page;
+use crate::dashboard::{dashboard_page, DashBoard};
+use crate::database::{validate_user, get_random_token, assign_cookie};
+use std::collections::HashMap;
 
 fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     let styles_str = match read_str("styles/styles.css") {
@@ -39,6 +41,17 @@ fn get_lite_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
+fn get_dash_styles() -> impl Future<Item=HttpResponse, Error=Error> {
+    let styles_str = match read_str("styles/dashboard.css") {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("Error on reading styles: {}", err);
+            format!("")
+        }
+    };
+
+    ok(HttpResponse::Ok().body(format!("{}", styles_str)))
+}
 
 #[derive(Deserialize)]
 struct LoginInfo {
@@ -46,8 +59,33 @@ struct LoginInfo {
     password: String,
 }
 
-fn login_handler(form: web::Form<LoginInfo>, id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
-    println!("{:?}", id.identity());
+fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+    println!("login_handler: {:?}", id.identity());
+
+    let nick = form.username.clone();
+    let password = form.password.clone();
+
+    let validated = match validate_user(&mdata.connections, &nick, &password) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on handling login: {}", e);
+            return ok(HttpResponse::InternalServerError().body(format!("Error on login")));
+        }
+    };
+
+    if !validated {
+        return ok(HttpResponse::Ok().body("Incorrect login or password"));
+    }
+
+    let token = get_random_token();
+    id.remember(token.clone());
+
+    match assign_cookie(&mdata.connections, &nick, &token) {
+        Ok(_) => {println!("New login")},
+        Err(e) => {
+            eprintln!("Error on assigning cookies: {}", e);
+        }
+    };
 
     ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
@@ -58,7 +96,7 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity) -> impl Future<Item=H
     </head>
     <body>
     <script type=\"text/JavaScript\">
-      setTimeout(\"location.href='/dashboard';\", 1500);
+      setTimeout(\"location.href='/dashboard/default';\", 1500);
     </script>
     <p class=\"info\">
         Logged in. Redirecting in seconds, if this doesn't help, click here: <a href=\"/dashboard\">Go to Dashboard</a>
@@ -112,17 +150,29 @@ fn main_page() -> impl Future<Item=HttpResponse, Error=Error> {
 
 
 pub fn run_server(a_config: Arc<Mutex<Config>>) {
-    let config = { a_config.lock().unwrap().clone() };
+    let config: Config = { a_config.lock().unwrap().clone() };
+    let ds = match DashBoard::new(config.db_config) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on starting the server (make dashboard): {:?}", e);
+            return;
+        }
+    };
 
-    match HttpServer::new(||
+    //let dashboarder = ds.dashboard_pager;
+
+    match HttpServer::new( move || {
+
+
         App::new()
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
                     .name("auth-id")
-                    .secure(true),
+                    .secure(false),
             ))
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
+            .data(ds.clone())
             .service(web::resource("/main").to_async(main_page))
             .service(web::resource("/").to_async(main_page))
             .service(web::resource("/login").to_async(login_page))
@@ -130,11 +180,13 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/dashboard/{device}").to_async(dashboard_page))
             .service(web::resource("/styles.css").to_async(get_styles))
             .service(web::resource("/lite.css").to_async(get_lite_styles))
+            .service(web::resource("/dashboard.css").to_async(get_dash_styles))
+    }
     )
         .bind(config.bind_address)
         .unwrap()
         .run() {
         Ok(_) => println!("Server has been started."),
-        Err(err) => eprintln!("Error on starting the server: {:?}", err)
+        Err(e) => eprintln!("Error on starting the server: {:?}", e)
     };
 }

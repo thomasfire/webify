@@ -1,4 +1,5 @@
 extern crate webify;
+
 use webify::server::run_server;
 use webify::io_tools;
 use webify::config;
@@ -13,6 +14,10 @@ fn main() {
                 config::setup();
                 return;
             }
+            "--uadd" => {
+                config::add_user();
+                return;
+            }
             _ => {
                 println!("Unknown argument, exiting");
                 return;
@@ -21,5 +26,4 @@ fn main() {
     }
     let config = Arc::new(Mutex::new(config::read_config().unwrap()));
     let handler = run_server(config);
-
 }

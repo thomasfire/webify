@@ -3,14 +3,14 @@ use chrono::NaiveDateTime;
 
 use crate::schema::*;
 
-#[derive(Queryable, PartialEq, Debug)]
+#[derive(Queryable, PartialEq, Debug, Identifiable)]
 pub struct User {
     pub id: i32,
     pub name: String,
     pub password: String,
     pub cookie: Option<String>,
     pub groups: String,
-    pub wrong_attempts: Option<u32>,
+    pub wrong_attempts: Option<i32>,
 }
 
 

@@ -16,3 +16,4 @@ diesel = { version = "1.4.*", features = ["sqlite", "r2d2"] }
 chrono = "0.4.*"
 futures = "0.1.*"
 rust-crypto = "0.2.*"
+rand = "0.7.2"

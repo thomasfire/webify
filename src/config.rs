@@ -2,6 +2,8 @@ extern crate toml;
 
 use crate::io_tools;
 use crate::database::init_db;
+use crate::database::get_connection;
+use crate::database::insert_user;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -77,15 +79,44 @@ pub fn setup() {
 
     match write_config(&Config {
         db_config: db_config.clone(),
-        bind_address: bind_address.clone()
-
+        bind_address: bind_address.clone(),
     }) {
         Ok(_) => println!("Ok"),
         Err(err) => panic!("{:?}", err),
     };
 
-    match init_db(db_config) {
+    match init_db(&db_config) {
         Ok(_) => println!("Ok"),
         Err(err) => panic!("{:?}", err),
     };
+}
+
+pub fn add_user() {
+    let username = io_tools::read_std_line("Enter new username: ");
+    let password = io_tools::read_std_line("Enter new password: ");
+    let groups = io_tools::read_std_line("Enter groups, separated by comma: ");
+
+    let conf = match read_config() {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on reading config: {}", e);
+            return;
+        }
+    };
+
+    let conn = match get_connection(&conf.db_config) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on connecting to db: {}", e);
+            return;
+        }
+    };
+
+    match insert_user(&conn, &username, &password, Some(&groups)) {
+        Ok(_) => println!("User was added successfully"),
+        Err(e) => {
+            eprintln!("Error on adding user to db: {}", e);
+            return;
+        }
+    }
 }
