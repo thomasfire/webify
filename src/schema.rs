@@ -9,6 +9,7 @@ table! {
 table! {
     history (id) {
         id -> Integer,
+        username -> Nullable<Text>,
         get_query -> Text,
         timestamp -> Timestamp,
     }
@@ -20,7 +21,7 @@ table! {
         name -> Text,
         password -> Text,
         cookie -> Nullable<Text>,
-        groups -> Nullable<Text>,
+        groups -> Text,
         wrong_attempts -> Nullable<Integer>,
     }
 }

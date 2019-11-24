@@ -19,7 +19,7 @@ use diesel::r2d2::{self, ConnectionManager};
 use diesel::sqlite::Sqlite;
 use diesel::result::Error as dError;
 
-use crate::models::{Groups, UserAdd, User};
+use crate::models::{Groups, UserAdd, User, History, GroupAdd};
 use crate::schema::*;
 
 use self::crypto::digest::Digest;
@@ -52,18 +52,17 @@ pub fn get_user_groups(pool: &Pool, username: &str) -> Result<Vec<String>, Strin
         Err(err) => return Err(format!("Error on init_db: {:?}", err)),
     };
 
-    let res: Option<String> = match users::table.filter(users::columns::name.eq(username)).select(users::columns::groups).first(&connection) {
+    let res: String = match users::table.filter(users::columns::name.eq(username))
+        .select(users::columns::groups)
+        .first(&connection) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Error on getting user devices: {:?}", e);
+            eprintln!("Error on getting user devices (get_user_groups): {:?}", e);
             return Err(format!("Error on getting user devices: {:?}", e));
         }
     };
 
-    match res {
-        Some(gs) => return Ok(gs.split(",").map(|x| x.to_string()).collect()),
-        None => return Ok(vec![])
-    }
+    Ok(res.split(",").map(|x| x.to_string()).collect())
 }
 
 
@@ -94,24 +93,77 @@ pub fn get_user_devices(pool: &Pool, devices_map: &HashMap<String, String>, user
         Err(err) => return Err(format!("Error on get_user_devices: {:?}", err)),
     };
 
-    let res: Option<String> = match users::table.filter(users::columns::name.eq(username)).select(users::columns::groups).first(&connection) {
+    let res: String = match users::table.filter(users::columns::name.eq(username)).select(users::columns::groups).first(&connection) {
         Ok(r) => r,
         Err(e) => {
-            eprintln!("Error on getting user devices: {:?}", e);
+            eprintln!("Error on getting user devices (get_user_devices): {:?}", e);
             return Err(format!("Error on getting user devices: {:?}", e));
         }
     };
 
-    match res {
-        Some(gs) => Ok(gs.split(",").map(|x| devices_map.get(x)).filter(|x| match x {
-            Some(_) => true,
-            None => false,
-        }).map(|x| x.unwrap().to_string()).collect::<Vec<String>>()),
-        None => return Ok(vec![])
-    }
+    Ok(res.split(",").map(|x| devices_map.get(x)).filter(|x| match x {
+        Some(_) => true,
+        None => false,
+    }).map(|x| x.unwrap_or(&"".to_string()).to_string()).collect::<Vec<String>>())
 }
 
-pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
+pub fn get_all_users(pool: &Pool) -> Result<Vec<User>, String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on get_all_users (connection): {:?}", err)),
+    };
+
+
+    let users: Vec<User> = match users::table.load::<User>(&connection) {
+        Ok(d) => d,
+        Err(e) => return Err(format!("Error on loading users: {:?}", e)),
+    };
+
+    Ok(users)
+}
+
+
+pub fn get_all_history(pool: &Pool) -> Result<Vec<History>, String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on get_all_history (connection): {:?}", err)),
+    };
+
+
+    let hist: Vec<History> = match history::table.order(history::columns::id.desc()).load::<History>(&connection) {
+        Ok(d) => d,
+        Err(e) => return Err(format!("Error on loading history: {:?}", e)),
+    };
+
+    Ok(hist)
+}
+
+
+pub fn get_all_groups(pool: &Pool) -> Result<Vec<Groups>, String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on get_all_groups (connection): {:?}", err)),
+    };
+
+
+    let group: Vec<Groups> = match groups::table.load::<Groups>(&connection) {
+        Ok(d) => d,
+        Err(e) => return Err(format!("Error on loading groups: {:?}", e)),
+    };
+
+    Ok(group)
+}
+
+pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&String>) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -119,14 +171,94 @@ pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&
         }
         Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
     };
+
+    let gs = match groups {
+        Some(d) => d.as_str(),
+        None => ""
+    };
     let new_user = UserAdd {
         name: username,
         password: &get_hash(&password),
-        groups,
+        groups: gs,
     };
 
     match diesel::insert_into(users::table)
         .values(&new_user)
+        .execute(&connection) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
+    }
+}
+
+pub fn insert_group(pool: &Pool, group_name: &str, device: &str) -> Result<(), String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on insert_group (connection): {:?}", err)),
+    };
+
+    let new_group = GroupAdd {
+        g_name: group_name,
+        devices: device,
+    };
+
+    match diesel::insert_into(groups::table)
+        .values(&new_group)
+        .execute(&connection) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Error on inserting groups (insert): {:?}", err))
+    }
+}
+
+
+pub fn update_user_pass(pool: &Pool, username: &str, password: &str) -> Result<(), String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
+    };
+
+    match diesel::update(users::table.filter(users::columns::name.eq(username)))
+        .set(users::columns::password.eq(get_hash(password)))
+        .execute(&connection) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
+    }
+}
+
+pub fn update_user_group(pool: &Pool, username: &str, group: &str) -> Result<(), String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
+    };
+
+    match diesel::update(users::table.filter(users::columns::name.eq(username)))
+        .set(users::columns::groups.eq(group))
+        .execute(&connection) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
+    }
+}
+
+
+pub fn update_group(pool: &Pool, g_name: &str, devices: &str) -> Result<(), String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
+    };
+
+    match diesel::update(groups::table.filter(groups::columns::g_name.eq(g_name)))
+        .set(groups::columns::devices.eq(devices))
         .execute(&connection) {
         Ok(_) => Ok(()),
         Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
@@ -275,11 +407,12 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
         name TEXT not null,
         password TEXT not null,
         cookie TEXT null,
-        groups TEXT ,
+        groups TEXT not null,
         wrong_attempts INTEGER null
     );
     CREATE TABLE history (
         id INTEGER primary key not null,
+        username TEXT null,
         get_query TEXT not null,
         timestamp TIMESTAMP not null
     );

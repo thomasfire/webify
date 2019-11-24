@@ -10,3 +10,5 @@ pub mod database;
 pub mod dashboard;
 pub mod models;
 pub mod schema;
+pub mod device_trait;
+pub mod root_device;
