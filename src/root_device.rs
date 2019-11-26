@@ -216,16 +216,16 @@ impl DeviceWrite for RootDev {
 
 impl DeviceRequest for RootDev {
     fn request_query(&self, query: &QCommand) -> Result<String, String> {
-        unimplemented!()
+        Err("Unimplemented".to_string())
     }
 }
 
 impl DeviceConfirm for RootDev {
     fn confirm_query(&self, query: &QCommand) -> Result<String, String> {
-        unimplemented!()
+        Err("Unimplemented".to_string())
     }
 
     fn dismiss_query(&self, query: &QCommand) -> Result<String, String> {
-        unimplemented!()
+        Err("Unimplemented".to_string())
     }
 }

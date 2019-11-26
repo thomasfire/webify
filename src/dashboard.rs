@@ -11,7 +11,7 @@ use diesel::SqliteConnection;
 use futures::future::{err, Future, ok};
 use futures::IntoFuture;
 
-use crate::database::{get_connection, get_user_devices, get_user_from_cookie, on_init};
+use crate::database::{get_connection, get_user_devices, get_user_from_cookie, on_init, has_access_to_device, has_access_to_group};
 use crate::root_device::RootDev;
 use crate::device_trait::*;
 
@@ -28,6 +28,8 @@ impl<T> Device for T where T: DeviceRead + DeviceWrite + DeviceConfirm + DeviceR
 #[derive(Deserialize)]
 pub struct QCommand {
     pub qtype: char,
+    pub group: String,
+    pub username: String,
     pub command: String,
     pub payload: String,
 }
@@ -91,7 +93,44 @@ impl DashBoard {
     }
 
     pub fn dispatch(&self, username: &str, device: &str, query: QCommand) -> Result<String, String> {
-        unimplemented!()
+        if username != query.username {
+            return Err(format!("Wrong command credentials"));
+        }
+
+        let daccess = match has_access_to_device(&self.connections, &self.mapped_devices, username, device) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("Error on dispatching (getting access to dev): {}", e);
+                return Err("Error on dispatching".to_string());
+            }
+        };
+
+        let gaccess = match has_access_to_group(&self.connections, username, &query.group) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("Error on dispatching (getting access to group): {}", e);
+                return Err("Error on dispatching".to_string());
+            }
+        };
+
+        if !gaccess || !daccess {
+            return Err(format!("User {} has no access to the {}.{}. Contact the admin.", username, device, &query.group));
+        }
+
+        let fdevice = match self.dispatcher.resolve_by_name(device) {
+            Ok(d) => d,
+            Err(e) => return Err(format!("Error at getting the device `{}`: {}", device, e)),
+        };
+
+        match query.qtype {
+            'R' => fdevice.read_data(&query),
+            'W' => fdevice.write_data(&query),
+            'Q' => fdevice.request_query(&query),
+            'C' => fdevice.confirm_query(&query),
+            'D' => fdevice.dismiss_query(&query),
+            'S' => fdevice.read_status(),
+            _ => Err(format!("Unknown type of the query: {}", query.qtype))
+        }
     }
 }
 
