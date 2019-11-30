@@ -5,19 +5,25 @@ extern crate form_data;
 use std::collections::HashMap;
 
 use actix_identity::Identity;
-use actix_web::{Error, HttpResponse, web};
+use actix_web::{Error, HttpResponse, web, error};
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
-use futures::future::{err, Future, ok};
-use futures::IntoFuture;
+use futures::future::{err, Future, ok, Either};
+use futures::{IntoFuture, Stream};
+
+use actix_multipart::{Field, Multipart, MultipartError};
 
 use crate::database::{get_connection, get_user_devices, get_user_from_cookie, on_init, has_access_to_device, has_access_to_group};
 use crate::root_device::RootDev;
 use crate::device_trait::*;
-
+use std::io;
 use self::actix_web::http;
 use std::sync::{Arc, Mutex};
 use crate::file_device::FileDevice;
+use std::cell::Cell;
+use std::fs;
+use std::io::Write;
+use self::actix_web::http::header::ContentDisposition;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -131,6 +137,11 @@ impl DashBoard {
             'S' => fdevice.read_status(),
             _ => Err(format!("Unknown type of the query: {}", query.qtype))
         }
+    }
+
+    pub fn get_file_from_filer(&self, username: &str, path: &str) -> Result<Vec<u8>, String> {
+        let device = &self.dispatcher.file_device;
+        device.get_file(username, path)
     }
 }
 
@@ -255,4 +266,146 @@ pub fn dashboard_page_req(id: Identity, info: web::Path<(String)>,
             Ok(d) => d,
             Err(e) => e
         })))
+}
+
+pub fn file_sender(id: Identity, info: web::Path<(String)>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+    let cookie = match id.identity() {
+        Some(data) => data,
+        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+    };
+
+    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error in file_sender at getting the user: {:?}", e);
+            return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+        }
+    };
+
+    let file_data = match mdata.get_file_from_filer(&user, info.as_str()) {
+        Ok(d) => d,
+        Err(e) => return ok(HttpResponse::BadRequest().body(format!("<html>
+        <link rel=\"stylesheet\" type=\"text/css\" href=\"lite.css\" media=\"screen\" />\
+        <body>
+            <p class=\"error\">
+        Error on getting the file: {}
+    </p>
+        </body>
+        </html>", e)))
+    };
+
+
+    ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "text/plain; charset=UTF-8\r\n")
+        .set_header(http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"\r\n", info.as_str().split("/").collect::<Vec<&str>>().pop().unwrap_or("some_file")))
+        .body(file_data))
+}
+
+
+pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<(String)>) -> impl Future<Item=HttpResponse, Error=Error> {
+    let cookie = match id.identity() {
+        Some(data) => data,
+        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+    };
+
+    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error in upload_index at getting the user: {:?}", e);
+            return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+        }
+    };
+
+    let gaccess = match has_access_to_group(&mdata.connections, &user, "filer_write") {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Error on dispatching (getting access to group): {}", e);
+            return ok(HttpResponse::InternalServerError().body("Error on dispatching".to_string()));
+        }
+    };
+
+    if !gaccess {
+        return ok(HttpResponse::Forbidden().body("You are not allowed to upload files"));
+    }
+
+    ok(HttpResponse::Ok().body(format!(r#"<html>
+        <head><title>Upload to Filer</title></head>
+        <link rel="stylesheet" type="text/css" href="lite.css" media="screen" />
+        <body>
+            <div class="uploader">
+                <form target="/{}" method="post" enctype="multipart/form-data">
+                    <input type="file" name="file"/>
+                    <input type="submit" value="Submit"></button>
+                </form>
+            </div>
+        </body>
+    </html>"#, info.as_str())))
+}
+
+
+fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> impl Future<Item=(), Error=Error> {
+    let file_path_string = match field.content_disposition() {
+        Some(c_d) => match c_d.get_filename() {
+            Some(filename) => filename.replace(' ', "_").to_string(),
+            None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
+        },
+        None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
+    };
+    Either::B(
+        field
+            .fold((0i64), |(acc), bytes| {
+                web::block(|| {
+                    mdata.dispatcher.file_device.write_file(&username, &path, &bytes.to_vec()).map_err(|e| {
+                        eprintln!("file.write_all failed: {:?}", e);
+                        MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
+                    })?;
+                    Ok((0i64))
+                })
+                    .map_err(|e: error::BlockingError<MultipartError>| {
+                        match e {
+                            error::BlockingError::Error(e) => e,
+                            error::BlockingError::Canceled => MultipartError::Incomplete,
+                        }
+                    })
+            })
+            .map(|_acc| ())
+            .map_err(|e| {
+                eprintln!("save_file failed, {:?}", e);
+                err(error::ErrorInternalServerError(format!("{:?}", e)))
+            }),
+    )
+}
+
+pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<(String)>) -> impl Future<Item=HttpResponse, Error=Error> {
+
+
+    multipart
+        .map_err(error::ErrorInternalServerError)
+        .map(|field| {
+            let cookie = match id.identity() {
+                Some(data) => data,
+                None => return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future()),
+            };
+
+            let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+                Ok(data) => data,
+                Err(e) => {
+                    eprintln!("Error in uploader at getting the user: {:?}", e);
+                    return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future());
+                }
+            };
+
+            let gaccess = match has_access_to_group(&mdata.connections, &user, "filer_write") {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Error on uploader (getting access to group): {}", e);
+                    return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future());
+                }
+            };
+
+            if !gaccess {
+                return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future());
+            }
+
+            return save_file(field, user, info.to_string(), mdata.get_ref().clone());
+        })
 }

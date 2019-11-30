@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::io_tools::read_str;
 
 use self::actix_web::Error;
-use crate::dashboard::{dashboard_page, DashBoard, QCommand, dashboard_page_req};
+use crate::dashboard::{dashboard_page, DashBoard, QCommand, dashboard_page_req, file_sender, upload_index};
 use crate::database::{validate_user, get_random_token, assign_cookie};
 use std::collections::HashMap;
 
@@ -180,6 +180,12 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/styles.css").to_async(get_styles))
             .service(web::resource("/lite.css").to_async(get_lite_styles))
             .service(web::resource("/dashboard.css").to_async(get_dash_styles))
+            .service(web::resource("/download/{path}").to_async(file_sender))
+            .service(
+                web::resource("/upload/{path}")
+                    .route(web::get().to_async(upload_index))
+                    //.route(web::post().to_async(upload)),
+            )
     }
     )
         .bind(config.bind_address)
