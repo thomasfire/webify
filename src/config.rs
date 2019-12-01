@@ -1,7 +1,7 @@
 extern crate toml;
 
 use crate::io_tools;
-use crate::database::init_db;
+use crate::database::{init_db, insert_group};
 use crate::database::get_connection;
 use crate::database::insert_user;
 
@@ -116,6 +116,35 @@ pub fn add_user() {
         Ok(_) => println!("User was added successfully"),
         Err(e) => {
             eprintln!("Error on adding user to db: {}", e);
+            return;
+        }
+    }
+}
+
+pub fn add_group() {
+    let g_name = io_tools::read_std_line("Enter new group name: ");
+    let devices = io_tools::read_std_line("Enter devices, separated by comma: ");
+
+    let conf = match read_config() {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on reading config: {}", e);
+            return;
+        }
+    };
+
+    let conn = match get_connection(&conf.db_config) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on connecting to db: {}", e);
+            return;
+        }
+    };
+
+    match insert_group(&conn, &g_name, &devices) {
+        Ok(_) => println!("Group was added successfully"),
+        Err(e) => {
+            eprintln!("Error on adding group to db: {}", e);
             return;
         }
     }

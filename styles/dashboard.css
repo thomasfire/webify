@@ -2,7 +2,7 @@ body {
 	font-family: "Courier New";
 }
 
-.dashboard {
+.devices {
   height: 100%;
   width: 160px;
   position: fixed;
@@ -14,12 +14,19 @@ body {
   padding-top: 20px;
 }
 
-
-
-.devrow, .inforow {
-    display: table-row;
+.info {
+  margin-left: 160px;
+  padding: 0px 10px;
+}
+.devitem a {
+  padding: 6px 8px 6px 16px;
+  text-decoration: none;
+  font-size: 25px;
+  color: #818181;
+  display: block;
 }
 
-.devcell, .infocell {
-    display: table-column;
+@media screen and (max-height: 450px) {
+  .devices {padding-top: 15px;}
+  .devitem a {font-size: 18px;}
 }

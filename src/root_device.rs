@@ -186,10 +186,13 @@ impl RootDev {
 impl DeviceRead for RootDev {
     fn read_data(&self, query: &QCommand) -> Result<String, String> {
         let command = query.command.as_str();
+        if query.group != "root_read" {
+            return Err("No access".to_string())
+        }
         match command {
             "read_all_users" => self.read_users(),
-            "read_all_hist" => self.read_groups(),
-            "read_all_groups" => self.read_history(),
+            "read_all_hist" => self.read_history(),
+            "read_all_groups" => self.read_groups(),
             _ => Err(format!("Unknown command"))
         }
     }
@@ -202,6 +205,9 @@ impl DeviceRead for RootDev {
 impl DeviceWrite for RootDev {
     fn write_data(&self, query: &QCommand) -> Result<String, String> {
         let command = query.command.as_str();
+        if query.group != "root_write" {
+            return Err("No access".to_string())
+        }
         match command {
             "add_user" => self.insert_new_user(query.payload.as_str()),
             "update_user_password" => self.update_user_pass(query.payload.as_str()),

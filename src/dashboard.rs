@@ -8,8 +8,8 @@ use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error};
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
-use futures::future::{err, Future, ok, Either};
-use futures::{IntoFuture, Stream};
+use futures::future::{err, Future, ok, Either, FutureResult};
+use futures::{IntoFuture, Stream, Sink};
 
 use actix_multipart::{Field, Multipart, MultipartError};
 
@@ -24,6 +24,7 @@ use std::cell::Cell;
 use std::fs;
 use std::io::Write;
 use self::actix_web::http::header::ContentDisposition;
+use diesel::query_dsl::InternalJoinDsl;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -31,9 +32,9 @@ trait Device: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
 impl<T> Device for T where T: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct QCommand {
-    pub qtype: char,
+    pub qtype: String,
     pub group: String,
     pub username: String,
     pub command: String,
@@ -128,13 +129,13 @@ impl DashBoard {
             Err(e) => return Err(format!("Error at getting the device `{}`: {}", device, e)),
         };
 
-        match query.qtype {
-            'R' => fdevice.read_data(&query),
-            'W' => fdevice.write_data(&query),
-            'Q' => fdevice.request_query(&query),
-            'C' => fdevice.confirm_query(&query),
-            'D' => fdevice.dismiss_query(&query),
-            'S' => fdevice.read_status(),
+        match query.qtype.as_str() {
+            "R" => fdevice.read_data(&query),
+            "W" => fdevice.write_data(&query),
+            "Q" => fdevice.request_query(&query),
+            "C" => fdevice.confirm_query(&query),
+            "D" => fdevice.dismiss_query(&query),
+            "S" => fdevice.read_status(),
             _ => Err(format!("Unknown type of the query: {}", query.qtype))
         }
     }
@@ -158,12 +159,34 @@ fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, 
     format!("<ul class=\"devlist\">
             {}
     </ul>", devices.iter()
-        .map(|x| format!("<li class=\"devitem\"><a href=\"/{}\">{}</a></li>", x, x))
+        .map(|x| format!("<li class=\"devitem\"><a href=\"{}\">{}</a></li>", x, x))
         .collect::<Vec<String>>().join("\n"))
 }
 
 fn get_available_info(pool: &Pool, username: &str, device: &str) -> String {
-    format!("")
+    format!(r#"<div class="command_form">
+        <form action="/dashboard/{}"  method="post" >
+            <div class="command_f">
+               QType:<br>
+              <input type="text" name="qtype" value="R" class="qtype">
+              <br>
+              Group:<br>
+              <input type="text" name="group" value="filer_read" class="group">
+              <br>
+              Username:<br>
+              <input type="text" name="username" value="{}" class="username">
+              <br>
+              Command:<br>
+              <input type="text" name="command" value="" class="command">
+              <br>
+              <br>
+              Payload:<br>
+              <input type="text" name="payload" value="" class="payload">
+              <br><br>
+            </div>
+              <input type="submit" value="Send" class="button">
+        </form>
+    </div>"#, device, username)
 }
 
 pub fn dashboard_page(id: Identity, info: web::Path<(String)>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
@@ -230,6 +253,9 @@ pub fn dashboard_page_req(id: Identity, info: web::Path<(String)>,
         }
     };
 
+    if user != form.username {
+        return ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
+    }
 
     ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
@@ -342,55 +368,54 @@ pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<(
 }
 
 
-fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> impl Future<Item=(), Error=Error> {
+fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> Result<(), Error> {
     let file_path_string = match field.content_disposition() {
         Some(c_d) => match c_d.get_filename() {
             Some(filename) => filename.replace(' ', "_").to_string(),
-            None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
+            None => return Err(error::ErrorBadRequest("No content-disposition"))
         },
-        None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
+        None => return Err(error::ErrorBadRequest("No content-disposition"))
     };
-    Either::B(
-        field
-            .fold((0i64), |(acc), bytes| {
-                web::block(|| {
-                    mdata.dispatcher.file_device.write_file(&username, &path, &bytes.to_vec()).map_err(|e| {
-                        eprintln!("file.write_all failed: {:?}", e);
-                        MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
-                    })?;
-                    Ok((0i64))
-                })
-                    .map_err(|e: error::BlockingError<MultipartError>| {
-                        match e {
-                            error::BlockingError::Error(e) => e,
-                            error::BlockingError::Canceled => MultipartError::Incomplete,
-                        }
-                    })
+    let full_path = format!("{}/{}", path, file_path_string);
+    field
+        .fold((0i64, mdata, username, full_path), move |(acc, dash, username, full_path), bytes| {
+            web::block(move || {
+                dash.dispatcher.file_device.write_file(&username, &full_path, &bytes.to_vec()).map_err(|e| {
+                    eprintln!("file.write_all failed: {}", e);
+                    MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
+                })?;
+                Ok((0i64, dash, username, full_path))
             })
-            .map(|_acc| ())
-            .map_err(|e| {
-                eprintln!("save_file failed, {:?}", e);
-                err(error::ErrorInternalServerError(format!("{:?}", e)))
-            }),
-    )
+                .map_err(|e: error::BlockingError<MultipartError>| {
+                    match e {
+                        error::BlockingError::Error(e) => e,
+                        error::BlockingError::Canceled => MultipartError::Incomplete,
+                    }
+                })
+        })
+        .map(|_acc| ok(()))
+        .map_err(|e: MultipartError| {
+            eprintln!("save_file failed, {:?}", e);
+            err(error::ErrorInternalServerError(format!("{:?}", e)))
+        }).wait()
+        .map_err(|_: FutureResult<(), Error>| error::ErrorInternalServerError("Internal"))
+        .map(|_a: FutureResult<(), Error>| Ok(()))
+        .unwrap_or(Err(error::ErrorInternalServerError("Internal")))
 }
 
 pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<(String)>) -> impl Future<Item=HttpResponse, Error=Error> {
-
-
-    multipart
-        .map_err(error::ErrorInternalServerError)
-        .map(|field| {
+    let res = multipart
+        .then(move |field_r| {
             let cookie = match id.identity() {
                 Some(data) => data,
-                None => return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future()),
+                None => return err(error::ErrorUnauthorized("Unauthorized")),
             };
 
             let user = match get_user_from_cookie(&mdata.connections, &cookie) {
                 Ok(data) => data,
                 Err(e) => {
                     eprintln!("Error in uploader at getting the user: {:?}", e);
-                    return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future());
+                    return err(error::ErrorNotFound("Unauthorized")).into_future();
                 }
             };
 
@@ -398,14 +423,24 @@ pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>,
                 Ok(d) => d,
                 Err(e) => {
                     eprintln!("Error on uploader (getting access to group): {}", e);
-                    return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future());
+                    return err(error::ErrorForbidden("You are not allowed")).into_future();
                 }
             };
 
             if !gaccess {
-                return Either::A(err(error::ErrorBadRequest("No content-disposition")).into_future());
+                return err(error::ErrorForbidden("You are not allowed"));
             }
+            let field = match field_r {
+                Ok(d) => d,
+                Err(e) => return err(error::ErrorInternalServerError("Error on getting the file"))
+            };
 
-            return save_file(field, user, info.to_string(), mdata.get_ref().clone());
-        })
+            ok((field, user.clone(), info.to_string(), mdata.clone(), info.clone()))
+        }).and_then(|(field, username, path, mdata, info)| {
+        return save_file(field, username, info.to_string(), mdata.get_ref().clone());
+    }).into_future();
+
+    res
+        .map_err(|e| e.0)
+        .map(|d| HttpResponse::Ok().body("OK"))
 }

@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::io_tools::read_str;
 
 use self::actix_web::Error;
-use crate::dashboard::{dashboard_page, DashBoard, QCommand, dashboard_page_req, file_sender, upload_index};
+use crate::dashboard::{dashboard_page, DashBoard, QCommand, dashboard_page_req, file_sender, upload_index, uploader};
 use crate::database::{validate_user, get_random_token, assign_cookie};
 use std::collections::HashMap;
 
@@ -81,7 +81,7 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
     id.remember(token.clone());
 
     match assign_cookie(&mdata.connections, &nick, &token) {
-        Ok(_) => {println!("New login")},
+        Ok(_) => { println!("New login") }
         Err(e) => {
             eprintln!("Error on assigning cookies: {}", e);
         }
@@ -161,7 +161,7 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
 
     //let dashboarder = ds.dashboard_pager;
 
-    match HttpServer::new( move || {
+    match HttpServer::new(move || {
         App::new()
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
@@ -175,7 +175,9 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/").to_async(main_page))
             .service(web::resource("/login").to_async(login_page))
             .service(web::resource("/get_logged_in").route(web::post().to_async(login_handler)))
-            .service(web::resource("/dashboard/{device}").route(web::post().to_async(dashboard_page_req)))
+            .service(web::resource("/dashboard/{device}")
+                .route(web::post().to_async(dashboard_page_req))
+                .route(web::get().to_async(dashboard_page)))
             .service(web::resource("/dashboard/{device}").to_async(dashboard_page))
             .service(web::resource("/styles.css").to_async(get_styles))
             .service(web::resource("/lite.css").to_async(get_lite_styles))
@@ -184,7 +186,7 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(
                 web::resource("/upload/{path}")
                     .route(web::get().to_async(upload_index))
-                    //.route(web::post().to_async(upload)),
+                    .route(web::post().to_async(uploader)),
             )
     }
     )

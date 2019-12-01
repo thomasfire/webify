@@ -3,7 +3,7 @@ extern crate crypto;
 extern crate serde_json;
 extern crate rand;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, BTreeSet};
 
 use rand::random;
 use std::error::Error;
@@ -93,7 +93,9 @@ pub fn get_user_devices(pool: &Pool, devices_map: &HashMap<String, String>, user
         Err(err) => return Err(format!("Error on get_user_devices: {:?}", err)),
     };
 
-    let res: String = match users::table.filter(users::columns::name.eq(username)).select(users::columns::groups).first(&connection) {
+    let res: String = match users::table.filter(users::columns::name.eq(username))
+        .select(users::columns::groups)
+        .first(&connection) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("Error on getting user devices (get_user_devices): {:?}", e);
@@ -104,7 +106,7 @@ pub fn get_user_devices(pool: &Pool, devices_map: &HashMap<String, String>, user
     Ok(res.split(",").map(|x| devices_map.get(x)).filter(|x| match x {
         Some(_) => true,
         None => false,
-    }).map(|x| x.unwrap_or(&"".to_string()).to_string()).collect::<Vec<String>>())
+    }).map(|x| x.unwrap_or(&"".to_string()).to_string()).collect::<BTreeSet<String>>().iter().cloned().collect::<Vec<String>>())
 }
 
 pub fn get_all_users(pool: &Pool) -> Result<Vec<User>, String> {
@@ -433,7 +435,11 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
         id INTEGER primary key not null,
         g_name TEXT not null,
         devices TEXT not null
-    )
+    );
+    INSERT INTO groups (id, g_name, devices) VALUES (1, 'filer_read', 'filer');
+    INSERT INTO groups (id, g_name, devices) VALUES (2, 'filer_write', 'filer');
+    INSERT INTO groups (id, g_name, devices) VALUES (3, 'root_write', 'root');
+    INSERT INTO groups (id, g_name, devices) VALUES (4, 'root_read', 'root')
     ") {
         Ok(_) => println!("DB has been initialized successfully"),
         Err(err) => return Err(format!("Error on init_db at execution: {:?}", err))

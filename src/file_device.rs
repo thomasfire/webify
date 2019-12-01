@@ -11,6 +11,7 @@ use crate::io_tools::exists;
 use tar;
 use flate2::read::{GzDecoder, GzEncoder};
 use flate2::Compression;
+use std::io::BufWriter;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -89,8 +90,9 @@ impl FileDevice {
                 Err(e) => return Err(format!("Error on creating the file: {:?}", e))
             }
         };
-
-        let mut ar = tar::Builder::new(file);
+        let bfile = BufWriter::new(file);
+        eprintln!("{}", data.len());
+        let mut ar = tar::Builder::new(bfile);
         let mut file_compressed: Vec<u8> = vec![];
         let mut encoder = GzEncoder::new(&data[..], Compression::best());
         match encoder.read_to_end(&mut file_compressed) {
@@ -105,8 +107,9 @@ impl FileDevice {
         };
         head.set_size(file_compressed.len() as u64);
         head.set_cksum();
+        //head.set_mode();
 
-        match ar.append(&head, &file_compressed[..]) {
+        match ar.append_data(&mut head, payload,  &file_compressed[..]) {
             Ok(_) => (),
             Err(e) => return Err(format!("Error on writing to the archive: {:?}", e))
         };
