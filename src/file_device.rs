@@ -8,17 +8,25 @@ use diesel::r2d2::ConnectionManager;
 use crate::dashboard::QCommand;
 use std::fs;
 use crate::io_tools::exists;
-use tar;
 use flate2::read::{GzDecoder, GzEncoder};
 use flate2::Compression;
 use std::io::BufWriter;
+use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
+use std::borrow::BorrowMut;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+
+struct BufferedFile {
+    pub path: String,
+    pub data: Vec<u8>,
+}
 
 #[derive(Clone)]
 pub struct FileDevice {
     db_conn: Pool,
     storage: String,
+    buffered_files: Arc<Mutex<BTreeMap<String, BufferedFile>>>,
 }
 
 impl FileDevice {
@@ -27,131 +35,150 @@ impl FileDevice {
         if !exists(&store) {
             fs::create_dir(&store).unwrap();
         }
-        FileDevice { db_conn: conn.clone(), storage: store }
+        FileDevice { db_conn: conn.clone(), storage: store, buffered_files: Arc::new(Mutex::new(BTreeMap::new())) }
     }
 
     pub fn get_file(&self, username: &str, payload: &str) -> Result<Vec<u8>, String> {
-        let filepath = format!("{}/{}.tar", &self.storage, username);
+        println!("Trying to open the file");
+        let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
             return Err("No container was found".to_string());
         }
-
-        let file = match fs::File::open(&filepath) {
+        println!("Trying to open the file");
+        let mut file = match fs::File::open(&format!("{}/{}", filepath, payload)) {
             Ok(f) => f,
             Err(e) => return Err(format!("Error on opening the file: {:?}", e))
         };
-        let mut ar = tar::Archive::new(file);
-        let entries = match ar.entries() {
-            Ok(d) => d,
-            Err(e) => return Err(format!("Error on reading the file: {:?}", e))
-        };
 
+        println!("Start reading the file");
         let mut file_data: Vec<u8> = vec![];
-
-        for x in entries {
-            let mut f_e: tar::Entry<fs::File> = match x {
-                Ok(d) => d,
-                Err(e) => return Err(format!("Error on reading the container: {:?}", e))
-            };
-            let name = match f_e.path() {
-                Ok(d) => d.as_os_str().to_str().unwrap_or("").to_string(),
-                Err(e) => return Err(format!("Error on reading the paths: {:?}", e))
-            };
-            let is_correct = name.starts_with(payload);
-            if is_correct {
-                match f_e.read_to_end(&mut file_data) {
+        match file.read_to_end(&mut file_data) {
+            Ok(_) => {
+                let mut decoder = GzDecoder::new(&file_data[..]);
+                let mut decompressed: Vec<u8> = vec![];
+                match decoder.read_to_end(&mut decompressed) {
                     Ok(_) => {
-                        let mut decoder = GzDecoder::new(&file_data[..]);
-                        let mut decompressed: Vec<u8> = vec![];
-                        match decoder.read_to_end(&mut decompressed) {
-                            Ok(_) => return Ok(decompressed),
-                            Err(e) => return Err(format!("Error on decompressing the file: {}", e)),
-                        }
+                        println!("Size of decompressed: {}", decompressed.len());
+                        return Ok(decompressed);
                     }
-                    Err(e) => return Err(format!("Error on reading the file: {:?}", e))
+                    Err(e) => return Err(format!("Error on decompressing the file: {}", e)),
                 }
             }
-        }
-        Err("Couldn't find a file".to_string())
+            Err(e) => return Err(format!("Error on reading the file: {:?}", e))
+        };
     }
 
+    pub fn write_file(&mut self, username: &str, payload: &str, data: &[u8]) -> Result<(), String> {
+        if payload.contains("..") {
+            return Err("Wrong symbols were supplied".to_string());
+        }
+        let filepath = format!("{}/{}/{}", &self.storage, username, payload);
+        self.buffered_files.lock()
+            .map(move |mut x| {
+                match x.get_mut(&filepath) {
+                    Some(f) => {
+                        println!("Adding bytes: {}", data.len());
+                        f.data.extend_from_slice(data);
+                        println!("Added bytes: {}; Total: {}", data.len(), f.data.len());
+                        return ();
+                    }
+                    None => {
+                        println!("Initial Adding bytes: {}", data.len());
+                        x.insert(filepath.clone(), BufferedFile { path: filepath.clone(), data: data.to_vec() });
+                        println!("Wrote...");
+                        return ();
+                    }
+                };
+            }).map_err(|x| {
+            return format!("Internal error");
+        })
+    }
 
-    pub fn write_file(&self, username: &str, payload: &str, data: &Vec<u8>) -> Result<(), String> {
-        let filepath = format!("{}/{}.tar", &self.storage, username);
+    pub fn finish_file(&mut self, username: &str, payload: &str, directory: &str) -> Result<(), String> {
+        let filepath = format!("{}/{}", &self.storage, username);
 
-        let file = if exists(&filepath) {
-            match fs::File::open(&filepath) {
+        let mut file = if exists(&format!("{}/{}", filepath, directory)) {
+            match fs::File::create(format!("{}/{}", filepath, payload)) {
                 Ok(f) => f,
-                Err(e) => return Err(format!("Error on opening the file: {:?}", e))
+                Err(e) => return Err(format!("Error on creating the file: {:?}", e))
             }
         } else {
-            match fs::File::create(&filepath) {
+            match fs::create_dir_all(format!("{}/{}", filepath, directory)) {
+                Ok(_) => (),
+                Err(e) => return Err(format!("Error on making the directories: {:?}", e))
+            };
+            match fs::File::create(format!("{}/{}", filepath, payload)) {
                 Ok(f) => f,
                 Err(e) => return Err(format!("Error on creating the file: {:?}", e))
             }
         };
-        let bfile = BufWriter::new(file);
-        eprintln!("{}", data.len());
-        let mut ar = tar::Builder::new(bfile);
-        let mut file_compressed: Vec<u8> = vec![];
-        let mut encoder = GzEncoder::new(&data[..], Compression::best());
-        match encoder.read_to_end(&mut file_compressed) {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error on compressing the file: {:?}", e))
-        };
 
-        let mut head = tar::Header::new_gnu();
-        match head.set_path(payload) {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error on setting the filepath: {:?}", e))
-        };
-        head.set_size(file_compressed.len() as u64);
-        head.set_cksum();
-        //head.set_mode();
+        let res: Result<Result<(), String>, String> = self.buffered_files.lock().map(move |mut x| {
+            println!("Start writing");
+            let bf_data = match x.remove(&format!("{}/{}", filepath, payload)) {
+                Some(f) => f,
+                None => return Err("No data to write".to_string())
+            };
 
-        match ar.append_data(&mut head, payload,  &file_compressed[..]) {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error on writing to the archive: {:?}", e))
-        };
 
-        match ar.into_inner() {
-            Ok(_) => Ok(()),
-            Err(e) => Err(format!("Error on finishing the archive: {:?}", e))
+            let data = &bf_data.data;
+            eprintln!("{}", data.len());
+            let mut file_compressed: Vec<u8> = vec![];
+            let mut encoder = GzEncoder::new(&data[..], Compression::best());
+            match encoder.read_to_end(&mut file_compressed) {
+                Ok(_) => (),
+                Err(e) => return Err(format!("Error on compressing the file: {:?}", e))
+            };
+
+            match file.write_all(&file_compressed) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(format!("Error on writing the file: {:?}", e))
+            }
+        }).map_err(|x| {
+            return format!("Error on finishing the file: {}", x);
+        });
+
+        match res {
+            Ok(another) => another,
+            Err(e) => Err(e)
         }
     }
 
     fn get_list(&self, username: &str, payload: &str) -> Result<String, String> {
-        let filepath = format!("{}/{}.tar", &self.storage, username);
+        let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
             return Err("No container was found".to_string());
         }
-        let file = match fs::File::open(&filepath) {
+        let full_path = format!("{}/{}", filepath, payload);
+        let entries = match fs::read_dir(&full_path) {
             Ok(f) => f,
-            Err(e) => return Err(format!("Error on opening the file: {:?}", e))
+            Err(e) => return Err(format!("Error on opening the directory: {:?}", e))
         };
-        let mut ar = tar::Archive::new(file);
-
-        let entries = match ar.entries() {
-            Ok(d) => d,
-            Err(e) => return Err(format!("Error on reading the file: {:?}", e))
-        };
-
-        let mut list: Vec<String> = vec![];
-
-        for x in entries {
-            let f_e: tar::Entry<fs::File> = match x {
-                Ok(d) => d,
-                Err(e) => return Err(format!("Error on reading the container: {:?}", e))
-            };
-            let name = match f_e.path() {
-                Ok(d) => d.as_os_str().to_str().unwrap_or("").to_string(),
-                Err(e) => return Err(format!("Error on reading the paths: {:?}", e))
-            };
-            let is_correct = name.starts_with(payload);
-            if is_correct {
-                list.push(format!("<div class=\"item\"><a href=\"../download/{}\">{}</div>", name, name.trim_start_matches(payload)));
-            }
-        }
+        let list: Vec<String> = entries.filter(|x| x.is_ok())
+            .map(|x| {
+                match x {
+                    Ok(d) => {
+                        if d.path().is_file() {
+                            format!("<div class=\"item\"><a href=\"../download/{}%2F{}\">{}</div>", payload.replace("/", "%2F"), d.file_name().to_string_lossy(), d.file_name().to_string_lossy())
+                        } else {
+                            let name = d.file_name().to_string_lossy().to_string();
+                            format!(r#"<div class="linked_form">
+                                        <form action="/dashboard/filer"  method="post" id="dir_sender{}">
+                                            <div class="command_f">
+                                              <input type="hidden" name="qtype" value="R" class="qtype">
+                                              <input type="hidden" name="group" value="filer_read" class="group">
+                                              <input type="hidden" name="username" value="{}" class="username">
+                                              <input type="hidden" name="command" value="getlist" class="command">
+                                              <input type="hidden" name="payload" value="{}{}" class="payload">
+                                            </div>
+                                              <a href=" #" onclick="document.getElementById('dir_sender{}').submit();">{}</a>
+                                        </form>
+                            </div>"#, name, username, if payload.len() > 0 { payload.to_string() + "/" } else { "".to_string() }, name, name, name)
+                        }
+                    }
+                    Err(_) => format!(""),
+                }
+            }).collect();
 
         Ok(list.join("<br>"))
     }
@@ -159,37 +186,10 @@ impl FileDevice {
     fn create_dir(&self, username: &str, payload: &str) -> Result<String, String> {
         let filepath = format!("{}/{}.tar", &self.storage, username);
 
-        let file = if exists(&filepath) {
-            match fs::File::open(&filepath) {
-                Ok(f) => f,
-                Err(e) => return Err(format!("Error on opening the file: {:?}", e))
-            }
-        } else {
-            match fs::File::create(&filepath) {
-                Ok(f) => f,
-                Err(e) => return Err(format!("Error on creating the file: {:?}", e))
-            }
+        match fs::create_dir_all(format!("{}/{}", filepath, payload)) {
+            Ok(_) => return Ok("OK".to_string()),
+            Err(e) => return Err(format!("Error on making the directories: {:?}", e))
         };
-
-        let mut ar = tar::Builder::new(file);
-
-        match fs::create_dir_all(format!("temp/{}", payload)) {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error on creating dir: {:?}", e))
-        };
-        match ar.append_dir_all(payload,  &format!("temp/{}", payload)) {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error on writing to the archive: {:?}", e))
-        };
-
-        match fs::remove_dir_all("temp") {
-            Ok(_) => (),
-            Err(e) => return Err(format!("Error on removing the dir: {:?}", e))
-        };
-        match ar.into_inner() {
-            Ok(_) => Ok("".to_string()),
-            Err(e) => Err(format!("Error on finishing the archive: {:?}", e))
-        }
     }
 }
 

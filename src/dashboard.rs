@@ -295,6 +295,7 @@ pub fn dashboard_page_req(id: Identity, info: web::Path<(String)>,
 }
 
 pub fn file_sender(id: Identity, info: web::Path<(String)>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+    println!("File transfer");
     let cookie = match id.identity() {
         Some(data) => data,
         None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -308,21 +309,24 @@ pub fn file_sender(id: Identity, info: web::Path<(String)>, mdata: web::Data<Das
         }
     };
 
-    let file_data = match mdata.get_file_from_filer(&user, info.as_str()) {
+    let file_data = match mdata.get_file_from_filer(&user, &info.as_str().replace("%2F", "/")) {
         Ok(d) => d,
-        Err(e) => return ok(HttpResponse::BadRequest().body(format!("<html>
+        Err(e) => {
+            eprintln!("Error on getting the file: {}", e);
+            return ok(HttpResponse::BadRequest().body(format!("<html>
         <link rel=\"stylesheet\" type=\"text/css\" href=\"lite.css\" media=\"screen\" />\
         <body>
             <p class=\"error\">
-        Error on getting the file: {}
+        Error on getting the file `{}`: {}
     </p>
         </body>
-        </html>", e)))
+        </html>", info.as_str(), e)));}
     };
 
-
-    ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "text/plain; charset=UTF-8\r\n")
-        .set_header(http::header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"\r\n", info.as_str().split("/").collect::<Vec<&str>>().pop().unwrap_or("some_file")))
+    println!("File size: {}", file_data.len());
+    ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "multipart/form-data")
+        .set_header(http::header::CONTENT_LENGTH, file_data.len())
+        .set_header(http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", info.as_str().split("%2F").collect::<Vec<&str>>().pop().unwrap_or("some_file")))
         .body(file_data))
 }
 
@@ -378,28 +382,40 @@ fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> 
     };
     let full_path = format!("{}/{}", path, file_path_string);
     field
-        .fold((0i64, mdata, username, full_path), move |(acc, dash, username, full_path), bytes| {
+        .fold((0i64, mdata, username, full_path, path), move |(acc, mut dash, username, full_path, directory), bytes| {
             web::block(move || {
-                dash.dispatcher.file_device.write_file(&username, &full_path, &bytes.to_vec()).map_err(|e| {
+                println!("Data writing: {} bytes", bytes.len());
+                dash.dispatcher.file_device.write_file(&username, &full_path, &bytes).map_err(|e| {
                     eprintln!("file.write_all failed: {}", e);
                     MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
                 })?;
-                Ok((0i64, dash, username, full_path))
+                Ok((0i64, dash, username, full_path, directory))
             })
                 .map_err(|e: error::BlockingError<MultipartError>| {
+                    println!("Error on saving the file: {:?}", e);
                     match e {
                         error::BlockingError::Error(e) => e,
                         error::BlockingError::Canceled => MultipartError::Incomplete,
                     }
                 })
         })
-        .map(|_acc| ok(()))
+        .map(|(acc, mut dash, username, full_path, directory)| {
+            println!("Mapper one");
+            match dash.dispatcher.file_device.finish_file(&username, &full_path, &directory){
+                Ok(_) => ok(()),
+                Err(e) => err(error::ErrorInternalServerError(format!("{:?}", e)))
+            }
+
+        })
         .map_err(|e: MultipartError| {
             eprintln!("save_file failed, {:?}", e);
             err(error::ErrorInternalServerError(format!("{:?}", e)))
-        }).wait()
+        })
         .map_err(|_: FutureResult<(), Error>| error::ErrorInternalServerError("Internal"))
-        .map(|_a: FutureResult<(), Error>| Ok(()))
+        .map(|_a: FutureResult<(), Error>| {
+            println!("Mapper two");
+            Ok(())
+        }).wait()
         .unwrap_or(Err(error::ErrorInternalServerError("Internal")))
 }
 
@@ -435,9 +451,9 @@ pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>,
                 Err(e) => return err(error::ErrorInternalServerError("Error on getting the file"))
             };
 
-            ok((field, user.clone(), info.to_string(), mdata.clone(), info.clone()))
-        }).and_then(|(field, username, path, mdata, info)| {
-        return save_file(field, username, info.to_string(), mdata.get_ref().clone());
+            ok((field, user.clone(), info.to_string().replace("%2F", "/"), mdata.clone()))
+        }).and_then(|(field, username, path, mdata)| {
+        return save_file(field, username, path, mdata.get_ref().clone());
     }).into_future();
 
     res
