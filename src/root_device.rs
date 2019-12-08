@@ -197,8 +197,28 @@ impl DeviceRead for RootDev {
         }
     }
 
-    fn read_status(&self) -> Result<String, String> {
-        Ok(format!("Root is ready to use.\nNow you can view and write data."))
+    fn read_status(&self, query: &QCommand) -> Result<String, String> {
+        Ok(format!(r#"<div class="command_form">
+        <form action="/dashboard/root"  method="post" >
+            <div class="command_f">
+               QType:<br>
+              <input type="text" name="qtype" value="R" class="qtype">
+              <br>
+              Group:<br>
+              <input type="text" name="group" value="root_read" class="group">
+              <input type="hidden" name="username" value="{}" class="username">
+              <br>
+              Command:<br>
+              <input type="text" name="command" value="" class="command">
+              <br>
+              <br>
+              Payload:<br>
+              <input type="text" name="payload" value="" class="payload">
+              <br><br>
+            </div>
+              <input type="submit" value="Send" class="button">
+        </form>
+    </div>"#, query.username))
     }
 }
 

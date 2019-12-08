@@ -154,12 +154,12 @@ impl FileDevice {
             Ok(f) => f,
             Err(e) => return Err(format!("Error on opening the directory: {:?}", e))
         };
-        let list: Vec<String> = entries.filter(|x| x.is_ok())
+        let mut list: Vec<String> = entries.filter(|x| x.is_ok())
             .map(|x| {
                 match x {
                     Ok(d) => {
                         if d.path().is_file() {
-                            format!("<div class=\"item\"><a href=\"../download/{}%2F{}\">{}</div>", payload.replace("/", "%2F"), d.file_name().to_string_lossy(), d.file_name().to_string_lossy())
+                            format!("<div class=\"item\"><a href=\"../download/{}%2F{}\">{}</a></div>", payload.replace("/", "%2F"), d.file_name().to_string_lossy(), d.file_name().to_string_lossy())
                         } else {
                             let name = d.file_name().to_string_lossy().to_string();
                             format!(r#"<div class="linked_form">
@@ -180,14 +180,42 @@ impl FileDevice {
                 }
             }).collect();
 
+        list.push(format!(r#"<br><br><div class="createnew_form">
+                                        <form action="/dashboard/filer" method="post" id="create_new">
+                                            <div class="command_f">
+                                              <input type="hidden" name="qtype" value="W" class="qtype">
+                                              <input type="hidden" name="group" value="filer_write" class="group">
+                                              <input type="hidden" name="username" value="{}" class="username">
+                                              <input type="hidden" name="command" value="createdir" class="command">
+                                              <input type="text" name="payload" value="{}" class="payload">
+                                            </div>
+                                            <div class="createnew_link">
+                                              <a href=" #" onclick="document.getElementById('create_new').submit();">Create new dir</a>
+                                            </div>
+                                        </form>
+                            </div>"#, username, if payload.len() > 0 { payload.to_string() + "/" } else { "".to_string() }));
+
+        list.push(format!(r#"<br>
+        <div class="uploader">
+                Upload a file<br>
+                <form target="../../upload/{}" action="../../upload/{}" method="post" enctype="multipart/form-data">
+                    <input type="file" name="file"/><br>
+                    <input type="submit" value="Senden">
+                </form>
+            </div>
+        "#, payload.replace("/", "%2F"), payload.replace("/", "%2F")));
+
         Ok(list.join("<br>"))
     }
 
     fn create_dir(&self, username: &str, payload: &str) -> Result<String, String> {
-        let filepath = format!("{}/{}.tar", &self.storage, username);
-
+        let filepath = format!("{}/{}", &self.storage, username);
+        println!("Create {}/{}", filepath, payload);
         match fs::create_dir_all(format!("{}/{}", filepath, payload)) {
-            Ok(_) => return Ok("OK".to_string()),
+            Ok(_) => return Ok(match self.get_list(username, payload) {
+                Ok(r) => r,
+                Err(e) => format!("Error on getting list after created the dir: {}", e)
+            }),
             Err(e) => return Err(format!("Error on making the directories: {:?}", e))
         };
     }
@@ -208,8 +236,11 @@ impl DeviceRead for FileDevice {
         }
     }
 
-    fn read_status(&self) -> Result<String, String> {
-        Ok(format!("FileDevice is ready"))
+    fn read_status(&self, query: &QCommand) -> Result<String, String> {
+        if query.group != "rstatus" {
+            return Err("No access to this action".to_string());
+        }
+        self.get_list(&query.username, &query.payload)
     }
 }
 

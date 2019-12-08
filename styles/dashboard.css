@@ -26,6 +26,12 @@ body {
   display: block;
 }
 
+
+.utable td {
+  border-collapse: collapse;
+  border-right: solid 1px #818181;
+}
+
 @media screen and (max-height: 450px) {
   .devices {padding-top: 15px;}
   .devitem a {font-size: 18px;}

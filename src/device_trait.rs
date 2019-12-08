@@ -3,7 +3,7 @@ use crate::dashboard::QCommand;
 
 pub trait DeviceRead {
     fn read_data(&self, query: &QCommand) -> Result<String, String>;
-    fn read_status(&self) -> Result<String, String>;
+    fn read_status(&self, query: &QCommand) -> Result<String, String>;
 }
 
 

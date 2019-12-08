@@ -96,7 +96,7 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
     </head>
     <body>
     <script type=\"text/JavaScript\">
-      setTimeout(\"location.href='/dashboard/default';\", 1500);
+      setTimeout(\"location.href='/dashboard/filer';\", 1500);
     </script>
     <p class=\"info\">
         Logged in. Redirecting in seconds, if this doesn't help, click here: <a href=\"/dashboard\">Go to Dashboard</a>

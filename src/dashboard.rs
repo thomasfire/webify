@@ -135,7 +135,7 @@ impl DashBoard {
             "Q" => fdevice.request_query(&query),
             "C" => fdevice.confirm_query(&query),
             "D" => fdevice.dismiss_query(&query),
-            "S" => fdevice.read_status(),
+            "S" => fdevice.read_status(&query),
             _ => Err(format!("Unknown type of the query: {}", query.qtype))
         }
     }
@@ -163,30 +163,13 @@ fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, 
         .collect::<Vec<String>>().join("\n"))
 }
 
-fn get_available_info(pool: &Pool, username: &str, device: &str) -> String {
-    format!(r#"<div class="command_form">
-        <form action="/dashboard/{}"  method="post" >
-            <div class="command_f">
-               QType:<br>
-              <input type="text" name="qtype" value="R" class="qtype">
-              <br>
-              Group:<br>
-              <input type="text" name="group" value="filer_read" class="group">
-              <br>
-              Username:<br>
-              <input type="text" name="username" value="{}" class="username">
-              <br>
-              Command:<br>
-              <input type="text" name="command" value="" class="command">
-              <br>
-              <br>
-              Payload:<br>
-              <input type="text" name="payload" value="" class="payload">
-              <br><br>
-            </div>
-              <input type="submit" value="Send" class="button">
-        </form>
-    </div>"#, device, username)
+fn get_available_info(dasher: &DashBoard, username: &str, device: &str) -> String {
+    let query = QCommand{qtype: "S".to_string(), group: "rstatus".to_string(), username: username.to_string(), command: "".to_string(), payload: "".to_string() };
+
+    match dasher.dispatch(username, device, query) {
+        Ok(d) => d,
+        Err(e) => format!("Error on getting the available info: {}", e)
+    }
 }
 
 pub fn dashboard_page(id: Identity, info: web::Path<(String)>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
@@ -235,7 +218,7 @@ pub fn dashboard_page(id: Identity, info: web::Path<(String)>, mdata: web::Data<
     </body>
     </html>
     ", get_available_devices(&mdata.connections, &mdata.mapped_devices, &user)
-                                       , get_available_info(&mdata.connections, &user, info.as_str()))))
+                                       , get_available_info(&mdata, &user, info.as_str()))))
 }
 
 pub fn dashboard_page_req(id: Identity, info: web::Path<(String)>,
@@ -364,7 +347,7 @@ pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<(
             <div class="uploader">
                 <form target="/{}" method="post" enctype="multipart/form-data">
                     <input type="file" name="file"/>
-                    <input type="submit" value="Submit"></button>
+                    <input type="submit" value="Submit">
                 </form>
             </div>
         </body>
