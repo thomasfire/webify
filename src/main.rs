@@ -18,12 +18,16 @@ fn main() {
                 config::add_user();
                 return;
             }
+            "--gadd" => {
+                config::add_group();
+                return;
+            }
             _ => {
                 println!("Unknown argument, exiting");
                 return;
             }
         }
     }
-    let config = Arc::new(Mutex::new(config::read_config().unwrap()));
+    let config = Arc::new(Mutex::new(config::read_config::<config::Config>(config::default_config_path).unwrap()));
     let handler = run_server(config);
 }
