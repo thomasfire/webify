@@ -28,6 +28,6 @@ fn main() {
             }
         }
     }
-    let config = Arc::new(Mutex::new(config::read_config::<config::Config>(config::default_config_path).unwrap()));
+    let config = Arc::new(Mutex::new(config::read_config::<config::Config>(config::DEFAULT_CONFIG_PATH).unwrap()));
     let handler = run_server(config);
 }

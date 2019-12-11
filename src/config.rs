@@ -6,6 +6,9 @@ use crate::database::get_connection;
 use crate::database::insert_user;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
+use crate::printer_device::PrinterDevice;
+use crate::printer_device::PRINTER_CONFIG_PATH;
+use crate::printer_device::PrinterConfig;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -13,7 +16,7 @@ pub struct Config {
     pub bind_address: String,
 }
 
-pub static default_config_path: &str = "config.toml";
+pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
 
 /// Reads `config.toml` and returns Result with Users on Ok()
 ///
@@ -76,16 +79,26 @@ pub fn write_config<T: Serialize + DeserializeOwned + Clone>(config: T, conf_pat
     };
 }
 
-/// Setups your Telegram/IMAP bots by command prompt
 pub fn setup() {
     let bind_address = io_tools::read_std_line("Enter address to bind on: ");
     let db_config = io_tools::read_std_line("Enter sqlite path: ");
 
+    println!("\nHere is your printers:\n{}\n", PrinterDevice::get_printers());
+    let m_printer = io_tools::read_std_line("Enter name of the printer: ");
+    let m_storage = io_tools::read_std_line("Enter path to the printer storage: ");
+
     match write_config::<Config>(Config {
         db_config: db_config.clone(),
         bind_address: bind_address.clone(),
-    }, default_config_path) {
+    }, DEFAULT_CONFIG_PATH) {
         Ok(_) => println!("Ok"),
+        Err(err) => panic!("{:?}", err),
+    };
+
+    match write_config::<PrinterConfig>(PrinterConfig {
+        storage: m_storage, printer: m_printer
+    }, PRINTER_CONFIG_PATH) {
+        Ok(_) => println!("Printer Ok"),
         Err(err) => panic!("{:?}", err),
     };
 
@@ -100,7 +113,7 @@ pub fn add_user() {
     let password = io_tools::read_std_line("Enter new password: ");
     let groups = io_tools::read_std_line("Enter groups, separated by comma: ");
 
-    let conf = match read_config::<Config>(default_config_path) {
+    let conf = match read_config::<Config>(DEFAULT_CONFIG_PATH) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error on reading config: {}", e);
@@ -129,7 +142,7 @@ pub fn add_group() {
     let g_name = io_tools::read_std_line("Enter new group name: ");
     let devices = io_tools::read_std_line("Enter devices, separated by comma: ");
 
-    let conf = match read_config::<Config>(default_config_path) {
+    let conf = match read_config::<Config>(DEFAULT_CONFIG_PATH) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error on reading config: {}", e);
