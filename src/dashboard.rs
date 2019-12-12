@@ -25,6 +25,8 @@ use std::fs;
 use std::io::Write;
 use self::actix_web::http::header::ContentDisposition;
 use diesel::query_dsl::InternalJoinDsl;
+use crate::printer_device::PrinterDevice;
+use std::borrow::Borrow;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -46,17 +48,20 @@ pub struct QCommand {
 struct Dispatch {
     file_device: FileDevice,
     root_device: RootDev,
+    printer_device: PrinterDevice,
 }
 
 impl Dispatch {
     pub fn new(conn: Pool) -> Dispatch {
-        Dispatch { file_device: FileDevice::new(&conn), root_device: RootDev::new(&conn) }
+        let filer = FileDevice::new(&conn);
+        Dispatch { printer_device: PrinterDevice::new(&conn, Arc::new(filer.clone())), file_device: filer, root_device: RootDev::new(&conn) }
     }
 
     pub fn resolve_by_name(&self, devname: &str) -> Result<&dyn Device, String> {
         match devname {
             "filer" => Ok(&self.file_device),
             "root" => Ok(&self.root_device),
+            "printer" => Ok(&self.printer_device),
             _ => Err("No such device".to_string())
         }
     }
