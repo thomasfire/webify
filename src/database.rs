@@ -441,7 +441,9 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
     INSERT INTO groups (id, g_name, devices) VALUES (3, 'root_write', 'root');
     INSERT INTO groups (id, g_name, devices) VALUES (4, 'root_read', 'root');
     INSERT INTO groups (id, g_name, devices) VALUES (5, 'printer_read', 'printer');
-    INSERT INTO groups (id, g_name, devices) VALUES (6, 'printer_write', 'printer')
+    INSERT INTO groups (id, g_name, devices) VALUES (6, 'printer_write', 'printer');
+    INSERT INTO groups (id, g_name, devices) VALUES (7, 'printer_request', 'printer');
+    INSERT INTO groups (id, g_name, devices) VALUES (8, 'printer_confirm', 'printer')
     ") {
         Ok(_) => println!("DB has been initialized successfully"),
         Err(err) => return Err(format!("Error on init_db at execution: {:?}", err))

@@ -7,7 +7,8 @@ use std::process::Command;
 use std::fs::{remove_file, remove_dir_all, create_dir_all};
 use diesel::{SqliteConnection, r2d2};
 use diesel::r2d2::ConnectionManager;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::collections::BTreeMap;
 use crate::io_tools::exists;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
@@ -18,33 +19,36 @@ pub struct PrinterConfig {
     pub storage: String,
 }
 
+#[derive(Clone, Debug)]
+struct PrintRequest {
+    id: u32,
+    query: QCommand,
+}
+
 #[derive(Clone)]
 pub struct PrinterDevice {
-    db_conn: Pool,
     config: PrinterConfig,
     filer: Arc<FileDevice>,
+    queue: Arc<Mutex<BTreeMap<u32, PrintRequest>>>,
 }
 
 pub static PRINTER_CONFIG_PATH: &str = "printer_config.toml";
 
 impl PrinterDevice {
-    pub fn new(conn: &Pool, file_manager: Arc<FileDevice>) -> PrinterDevice {
+    pub fn new(file_manager: Arc<FileDevice>) -> PrinterDevice {
         let config = config::read_config::<PrinterConfig>(PRINTER_CONFIG_PATH).unwrap_or(PrinterConfig
             { printer: "".to_string(), storage: "".to_string() });
-        PrinterDevice { config, db_conn: conn.clone(), filer: file_manager.clone() }
+        PrinterDevice { config, filer: file_manager.clone(), queue: Arc::new(Mutex::new(BTreeMap::new())) }
     }
 
     pub fn print_from_file(&self, filename: &str) -> Result<String, String> {
-        let printing_process = match Command::new("lp")
-            .args(&["-d", &self.config.printer, &format!("{}/{}", self.config.storage, filename)]).spawn() {
+        let d = match Command::new("lp")
+            .args(&["-d", &self.config.printer, &format!("{}", filename)]).output() {
             Ok(child) => child,
             Err(err) => return Err(format!("Error running the printing process (lp): {}", err)),
         };
 
-        match printing_process.wait_with_output() {
-            Ok(d) => Ok(format!("Output: {};\nErrors: {};", String::from_utf8_lossy(&d.stdout), String::from_utf8_lossy(&d.stderr))),
-            Err(e) => Err(format!("Failed to wait for `lp`: {}", e)),
-        }
+        Ok(format!("Output: {};\nErrors: {};", String::from_utf8_lossy(&d.stdout), String::from_utf8_lossy(&d.stderr)))
     }
 
     /// Returns output of the `$ lpstat` command
@@ -97,8 +101,10 @@ impl PrinterDevice {
                 Err(e) => return Err(format!("Error on creating the storage: {}", e)),
             };
         }
-        match io_tools::write_bytes_to_file(&format!("{}/{}", self.config.storage, query.payload.split("/").last().unwrap_or("nonamefile")), data) {
-            Ok(_) => Ok("OK".to_string()),
+        let filename = format!("{}/{}", self.config.storage, query.payload.split("/").last().unwrap_or("nonamefile"));
+        println!("Cached to: {}", filename);
+        match io_tools::write_bytes_to_file(&filename, data) {
+            Ok(_) => Ok(filename),
             Err(e) => Err(format!("Error on writing to the cache: {}", e))
         }
     }
@@ -112,6 +118,88 @@ impl PrinterDevice {
             Ok(_) => Ok("OK".to_string()),
             Err(e) => return Err(format!("Error on creating the storage: {}", e)),
         }
+    }
+
+    fn make_request(&self, query: &QCommand) -> Result<String, String> {
+        self.queue.lock().map(|mut x| {
+            let mut buff: u32 = 0;
+            for y in 0..(256 * 256) {
+                if !x.contains_key(&(y as u32)) {
+                    x.insert(y, PrintRequest { query: query.clone(), id: y });
+                    buff = y;
+                    break;
+                }
+            }
+            format!("OK, your id: {}", buff)
+        }).map_err(|x| {
+            format!("Internal error on making request: {:?}", x)
+        })
+    }
+
+    fn delete_query(&self, ids: &str) -> Result<String, String> {
+        let id: u32 = match ids.parse() {
+            Ok(d) => d,
+            Err(e) => return Err(format!("Error: wrong payload: {}", e))
+        };
+        self.queue.lock().map(|mut x| {
+            match x.remove(&id) {
+                Some(_d) => format!("OK, deleted {}", &id),
+                None => format!("OK, there is no such request: {}", &id)
+            }
+        }).map_err(|x| {
+            format!("Error on accessing the queue: {:?}", x)
+        })
+    }
+
+    fn confirm_query(&self, ids: &str) -> Result<String, String> {
+        let id: u32 = match ids.parse() {
+            Ok(d) => d,
+            Err(e) => return Err(format!("Error: wrong payload: {}", e))
+        };
+        let req = match self.queue.lock().map(|mut x| {
+            match x.remove(&id) {
+                Some(d) => Ok(d),
+                None => Err(format!("Err, there is no such request: {}", &id))
+            }
+        }).map_err(|x| {
+            format!("Error on accessing the queue: {:?}", x)
+        }) {
+            Ok(d) => match d {
+                Ok(r) => r,
+                Err(e) => return Err(format!("Error on unwrapping the result at `confirm_query`: {}", e))
+            },
+            Err(e) => return Err(format!("Error on confirming: {}", e)),
+        };
+
+        let path = match self.cache(&req.query) {
+            Ok(d) => d,
+            Err(e) => return Err(format!("Error on confirming and getting cached: {}", e))
+        };
+
+        self.print_from_file(&path)
+    }
+
+    fn get_list(&self) -> Result<String, String> {
+        self.queue.lock()
+            .map(|x| format!(r#"
+            <table class="reqtable">
+            <tr>
+            <th>id</th>
+            <th>username</th>
+            <th>payload</th>
+            <th></th>
+            </tr>
+            {}
+            </table>"#, x.values().map(|t| {
+                format!(r#"<tr>
+                            <td>{}</td>
+                            <td>{}</td>
+                            <td>{}</td>
+                        </tr>"#, t.id, t.query.username, t.query.payload)
+            }).collect::<Vec<String>>().join("\n")))
+            .map_err(|x| {
+                format!("Error on getting the list: {:?}", x)
+            })
     }
 }
 
@@ -136,14 +224,14 @@ impl DeviceRead for PrinterDevice {
         <form action="/dashboard/printer"  method="post" >
             <div class="command_f">
                QType:<br>
-              <input type="text" name="qtype" value="R" class="qtype">
+              <input type="text" name="qtype" value="Q" class="qtype">
               <br>
               Group:<br>
-              <input type="text" name="group" value="printer_read" class="group">
+              <input type="text" name="group" value="printer_request" class="group">
               <input type="hidden" name="username" value="{}" class="username">
               <br>
               Command:<br>
-              <input type="text" name="command" value="" class="command">
+              <input type="text" name="command" value="print_file" class="command">
               <br>
               <br>
               Payload:<br>
@@ -168,7 +256,7 @@ impl DeviceWrite for PrinterDevice {
         }
 
         match query.command.as_str() {
-            "print_file" => self.print_from_file(&query.payload),
+            "print_file" => self.print_from_file(&format!("{}/{}", self.config.storage, query.payload)),
             "cancel" => Self::cancel(&query.payload),
             "cache" => self.cache(&query),
             "cache_clear" => self.clear_cache(),
@@ -180,16 +268,35 @@ impl DeviceWrite for PrinterDevice {
 
 impl DeviceRequest for PrinterDevice {
     fn request_query(&self, query: &QCommand) -> Result<String, String> {
-        Err("Unimplemented".to_string())
+        if &query.group != "printer_request" {
+            return Err("Error: wrong permissions".to_string());
+        }
+        match query.command.as_str() {
+            "print_file" => self.make_request(query),
+            _ => Err("Unknown command".to_string())
+        }
     }
 }
 
 impl DeviceConfirm for PrinterDevice {
     fn confirm_query(&self, query: &QCommand) -> Result<String, String> {
-        Err("Unimplemented".to_string())
+        if &query.group != "printer_confirm" {
+            return Err("Error: wrong permissions".to_string());
+        }
+        match query.command.as_str() {
+            "confirm" => self.confirm_query(&query.payload),
+            "list" => self.get_list(),
+            _ => Err("Unknown command".to_string())
+        }
     }
 
     fn dismiss_query(&self, query: &QCommand) -> Result<String, String> {
-        Err("Unimplemented".to_string())
+        if &query.group != "printer_confirm" {
+            return Err("Error: wrong permissions".to_string());
+        }
+        match query.command.as_str() {
+            "dismiss" => self.delete_query(&query.payload),
+            _ => Err("Unknown command".to_string())
+        }
     }
 }

@@ -34,7 +34,7 @@ trait Device: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
 impl<T> Device for T where T: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
-#[derive(Deserialize, Serialize)]
+#[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct QCommand {
     pub qtype: String,
     pub group: String,
@@ -54,7 +54,7 @@ struct Dispatch {
 impl Dispatch {
     pub fn new(conn: Pool) -> Dispatch {
         let filer = FileDevice::new(&conn);
-        Dispatch { printer_device: PrinterDevice::new(&conn, Arc::new(filer.clone())), file_device: filer, root_device: RootDev::new(&conn) }
+        Dispatch { printer_device: PrinterDevice::new(Arc::new(filer.clone())), file_device: filer, root_device: RootDev::new(&conn) }
     }
 
     pub fn resolve_by_name(&self, devname: &str) -> Result<&dyn Device, String> {
