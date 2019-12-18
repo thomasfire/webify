@@ -169,7 +169,7 @@ fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, 
 }
 
 fn get_available_info(dasher: &DashBoard, username: &str, device: &str) -> String {
-    let query = QCommand{qtype: "S".to_string(), group: "rstatus".to_string(), username: username.to_string(), command: "".to_string(), payload: "".to_string() };
+    let query = QCommand { qtype: "S".to_string(), group: "rstatus".to_string(), username: username.to_string(), command: "".to_string(), payload: "".to_string() };
 
     match dasher.dispatch(username, device, query) {
         Ok(d) => d,
@@ -308,7 +308,8 @@ pub fn file_sender(id: Identity, info: web::Path<(String)>, mdata: web::Data<Das
         Error on getting the file `{}`: {}
     </p>
         </body>
-        </html>", info.as_str(), e)));}
+        </html>", info.as_str(), e)));
+        }
     };
 
     println!("File size: {}", file_data.len());
@@ -360,51 +361,47 @@ pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<(
 }
 
 
-fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> Result<(), Error> {
+fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> impl Future<Item=(), Error=Error> {
     let file_path_string = match field.content_disposition() {
         Some(c_d) => match c_d.get_filename() {
             Some(filename) => filename.replace(' ', "_").to_string(),
-            None => return Err(error::ErrorBadRequest("No content-disposition"))
+            None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
         },
-        None => return Err(error::ErrorBadRequest("No content-disposition"))
+        None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
     };
     let full_path = format!("{}/{}", path, file_path_string);
-    field
-        .fold((0i64, mdata, username, full_path, path), move |(acc, mut dash, username, full_path, directory), bytes| {
-            web::block(move || {
-                println!("Data writing: {} bytes", bytes.len());
-                dash.dispatcher.file_device.write_file(&username, &full_path, &bytes).map_err(|e| {
-                    eprintln!("file.write_all failed: {}", e);
-                    MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
-                })?;
-                Ok((0i64, dash, username, full_path, directory))
-            })
-                .map_err(|e: error::BlockingError<MultipartError>| {
-                    println!("Error on saving the file: {:?}", e);
-                    match e {
-                        error::BlockingError::Error(e) => e,
-                        error::BlockingError::Canceled => MultipartError::Incomplete,
-                    }
-                })
-        })
-        .map(|(acc, mut dash, username, full_path, directory)| {
-            println!("Mapper one");
-            match dash.dispatcher.file_device.finish_file(&username, &full_path, &directory){
-                Ok(_) => ok(()),
-                Err(e) => err(error::ErrorInternalServerError(format!("{:?}", e)))
-            }
 
-        })
-        .map_err(|e: MultipartError| {
-            eprintln!("save_file failed, {:?}", e);
-            err(error::ErrorInternalServerError(format!("{:?}", e)))
-        })
-        .map_err(|_: FutureResult<(), Error>| error::ErrorInternalServerError("Internal"))
-        .map(|_a: FutureResult<(), Error>| {
-            println!("Mapper two");
-            Ok(())
-        }).wait()
-        .unwrap_or(Err(error::ErrorInternalServerError("Internal")))
+    Either::B(
+        field
+            .fold((0i64, mdata, username, full_path, path), move |(acc, mut dash, username, full_path, directory), bytes| {
+                web::block(move || {
+                    dash.dispatcher.file_device.write_file(&username, &full_path, &bytes).map_err(|e| {
+                        println!("file.write_all failed: {}", e);
+                        MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
+                    })?;
+                    Ok((0i64, dash, username, full_path, directory))
+                })
+                    .map_err(|e: error::BlockingError<MultipartError>| {
+                        match e {
+                            error::BlockingError::Error(e) => e,
+                            error::BlockingError::Canceled => MultipartError::Incomplete,
+                        }
+                    })
+            })
+            .map(|(acc, mut dash, username, full_path, directory)| {
+                match dash.dispatcher.file_device.finish_file(&username, &full_path, &directory) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        eprintln!("Error on finishing the file: {}", e);
+                        ()
+                    }
+                }
+            })
+            .map_err(|e| {
+                println!("save_file failed, {:?}", e);
+                error::ErrorInternalServerError(e)
+            }),
+    )
 }
 
 pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<(String)>) -> impl Future<Item=HttpResponse, Error=Error> {
