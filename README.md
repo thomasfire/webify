@@ -1,5 +1,6 @@
 # webify
-Webify every device
+
+### Webify every device
 
 Build your own device, that will be available via Web-Interface. 
 Here is your `Build a web_device check-list`:
@@ -14,3 +15,37 @@ pub mod web_device;
  * Add new web services in the `src/server.rs`, if you want to receive specific data (not necessary)
  * Add new groups for your device into the db via Root device (yeah, that's web panel)
  
+ You can see the working example at `src/printer_device.rs`.
+ 
+### Build and setup
+You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.40).
+You can easily install it on Fedora 31:
+```shell script
+$ sudo dnf install rust cargo # for building only
+$ sudo dnf install rust cargo rust-src rust-doc \
+  rust-debugger-common rust-lldb rust-gdb rustfmt rust-packaging # for developing
+```
+
+Build on Linux is pretty simple:
+```shell script
+$ ./build.sh build  # for debug version
+$ ./build.sh build --release  # for release version
+```
+
+After this you can copy the `target/[release, debug]/styles` and `target/[release, debug]/webify`
+to place you want. Go to that place and run:
+```shell script
+$ ./webify --setup  # configure the database, address and printer
+$ ./webify --uadd   # add your first user, remember that it must contain all the groups you need
+```
+
+After this you can just run the server:
+```shell script
+$ ./webify
+```
+
+If you need additional documentation, you can run:
+```shell script
+$ cargo doc
+```
+And see it at `target/doc/webify/index.html`.

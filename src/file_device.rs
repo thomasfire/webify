@@ -1,6 +1,5 @@
 use crate::device_trait::*;
 
-use std::io;
 use std::io::prelude::*;
 
 use diesel::{r2d2, SqliteConnection};
@@ -10,34 +9,33 @@ use std::fs;
 use crate::io_tools::exists;
 use flate2::read::{GzDecoder, GzEncoder};
 use flate2::Compression;
-use std::io::BufWriter;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
-use std::borrow::BorrowMut;
-
-type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 struct BufferedFile {
     pub path: String,
     pub data: Vec<u8>,
 }
 
+/// Contains path to the storage, and buffered files. And yes, files are stored in the RAM before
+/// actual writing.
 #[derive(Clone)]
 pub struct FileDevice {
-    db_conn: Pool,
     storage: String,
     buffered_files: Arc<Mutex<BTreeMap<String, BufferedFile>>>,
 }
 
 impl FileDevice {
-    pub fn new(conn: &Pool) -> FileDevice {
+    /// Creates new instance of FileDevice
+    pub fn new() -> FileDevice {
         let store = "filer".to_string();
         if !exists(&store) {
             fs::create_dir(&store).unwrap();
         }
-        FileDevice { db_conn: conn.clone(), storage: store, buffered_files: Arc::new(Mutex::new(BTreeMap::new())) }
+        FileDevice { storage: store, buffered_files: Arc::new(Mutex::new(BTreeMap::new())) }
     }
 
+    /// Returns content of the file as vector of bytes
     pub fn get_file(&self, username: &str, payload: &str) -> Result<Vec<u8>, String> {
         println!("Trying to open the file");
         let filepath = format!("{}/{}", &self.storage, username);
@@ -68,6 +66,7 @@ impl FileDevice {
         };
     }
 
+    /// Writes content to the the RAM
     pub fn write_file(&mut self, username: &str, payload: &str, data: &[u8]) -> Result<(), String> {
         if payload.contains("..") {
             return Err("Wrong symbols were supplied".to_string());
@@ -89,11 +88,12 @@ impl FileDevice {
                         return ();
                     }
                 };
-            }).map_err(|x| {
+            }).map_err(|_x| {
             return format!("Internal error");
         })
     }
 
+    /// Writes file from buffer to the disk after being compressed
     pub fn finish_file(&mut self, username: &str, payload: &str, directory: &str) -> Result<(), String> {
         let filepath = format!("{}/{}", &self.storage, username);
 
@@ -144,6 +144,7 @@ impl FileDevice {
         }
     }
 
+    /// Returns the list of files
     fn get_list(&self, username: &str, payload: &str) -> Result<String, String> {
         let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
@@ -262,17 +263,17 @@ impl DeviceWrite for FileDevice {
 
 
 impl DeviceRequest for FileDevice {
-    fn request_query(&self, query: &QCommand) -> Result<String, String> {
+    fn request_query(&self, _query: &QCommand) -> Result<String, String> {
         Err("Unimplemented".to_string())
     }
 }
 
 impl DeviceConfirm for FileDevice {
-    fn confirm_query(&self, query: &QCommand) -> Result<String, String> {
+    fn confirm_query(&self, _query: &QCommand) -> Result<String, String> {
         Err("Unimplemented".to_string())
     }
 
-    fn dismiss_query(&self, query: &QCommand) -> Result<String, String> {
+    fn dismiss_query(&self, _query: &QCommand) -> Result<String, String> {
         Err("Unimplemented".to_string())
     }
 }

@@ -11,6 +11,7 @@ use std::path::Path;
 /// # Examples
 ///
 /// ```rust
+/// use webify::io_tools::read_str;
 /// let file_string = read_str("path/to/file");
 /// ```
 pub fn read_str(filename: &str) -> Result<String, String> {
@@ -33,7 +34,8 @@ pub fn read_str(filename: &str) -> Result<String, String> {
 ///
 /// # Examples
 /// ```rust
-/// let some_useful_string = read_std_line();
+/// use webify::io_tools::read_std_line;
+/// let some_useful_string = read_std_line("Enter the usefulness: ");
 /// ```
 pub fn read_std_line(output: &str) -> String {
     let mut buffer = String::new();
@@ -55,7 +57,8 @@ pub fn exists(path: &str) -> bool {
 /// # Examples
 ///
 /// ```rust
-/// write_to_file("/path/to/file", "I`m file");
+/// use webify::io_tools::write_to_file;
+/// write_to_file("/path/to/file", "I`m file".to_string());
 /// ```
 pub fn write_to_file(path: &str, content: String) -> Result<(), io::Error> {
     let mut file = File::create(Path::new(path)).unwrap();
@@ -68,7 +71,8 @@ pub fn write_to_file(path: &str, content: String) -> Result<(), io::Error> {
 /// # Examples
 ///
 /// ```rust
-/// write_to_file("/path/to/file", vec![82, 82, 62]);
+/// use webify::io_tools::write_bytes_to_file;
+/// write_bytes_to_file("/path/to/file", vec![82, 82, 62]);
 /// ```
 pub fn write_bytes_to_file(path: &str, content: Vec<u8>) -> Result<usize, io::Error> {
     let mut file = File::create(Path::new(path)).unwrap();

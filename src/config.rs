@@ -23,7 +23,8 @@ pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
 /// # Examples
 ///
 /// ```rust
-/// let users = read_config().unwrap();
+/// use webify::config::{read_config, Config};
+/// let users = read_config::<Config>("config.toml").unwrap();
 /// ```
 pub fn read_config<T: Serialize + DeserializeOwned + Clone>(conf_path: &str) -> Result<T, String>
 {
@@ -54,9 +55,10 @@ pub fn read_config<T: Serialize + DeserializeOwned + Clone>(conf_path: &str) -> 
 /// # Examples
 ///
 /// ```rust
+/// use webify::config::Config;
 /// let config = Config {
-///     token: String::from("ava24efsef345"),
-///     printer: String::from("Your-Printer"),
+///     db_config: String::from("database.db"),
+///     bind_address: String::from("127.0.0.1:2280"),
 /// };
 /// write_database(config).unwrap();
 /// ```
@@ -79,6 +81,7 @@ pub fn write_config<T: Serialize + DeserializeOwned + Clone>(config: T, conf_pat
     };
 }
 
+/// Asks all necessary data for configuring the server and writes proper config
 pub fn setup() {
     let bind_address = io_tools::read_std_line("Enter address to bind on: ");
     let db_config = io_tools::read_std_line("Enter sqlite path: ");
@@ -96,7 +99,8 @@ pub fn setup() {
     };
 
     match write_config::<PrinterConfig>(PrinterConfig {
-        storage: m_storage, printer: m_printer
+        storage: m_storage,
+        printer: m_printer,
     }, PRINTER_CONFIG_PATH) {
         Ok(_) => println!("Printer Ok"),
         Err(err) => panic!("{:?}", err),
@@ -108,6 +112,8 @@ pub fn setup() {
     };
 }
 
+
+/// Adds user to the previously configured database
 pub fn add_user() {
     let username = io_tools::read_std_line("Enter new username: ");
     let password = io_tools::read_std_line("Enter new password: ");
@@ -138,6 +144,8 @@ pub fn add_user() {
     }
 }
 
+
+/// Adds group to the previously configured database
 pub fn add_group() {
     let g_name = io_tools::read_std_line("Enter new group name: ");
     let devices = io_tools::read_std_line("Enter devices, separated by comma: ");

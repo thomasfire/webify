@@ -1,12 +1,15 @@
-use diesel::prelude::*;
 use chrono::NaiveDateTime;
 
 use crate::schema::*;
 
+/// Represents that structure can be inserted in the table
 pub trait LineWebify {
     fn get_content(&self) -> String;
 }
 
+/// Represents user structure.
+/// User has id, username, password (should be always hashified),  cookie (if does have),
+/// groups user have, and number of wrong attempts he has made.
 #[derive(Queryable, PartialEq, Debug, Identifiable)]
 pub struct User {
     pub id: i32,
@@ -66,7 +69,7 @@ pub struct HistoryForm<'a> {
     pub get_query: &'a str
 }
 
-
+/// Groups is the structure, that matches group name with the device it has
 #[derive(Queryable, PartialEq, Debug)]
 pub struct Groups {
     pub id: i32,

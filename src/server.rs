@@ -5,18 +5,17 @@ use std::sync::{Arc, Mutex};
 
 use actix_identity::{CookieIdentityPolicy, IdentityService};
 use actix_identity::Identity;
-use actix_web::{App, HttpResponse, HttpServer, middleware, Responder, web};
-use form_data::Form;
-use futures::future::{err, Future, ok};
+use actix_web::{App, HttpResponse, HttpServer, middleware, web};
+use futures::future::{Future, ok};
 
 use crate::config::Config;
 use crate::io_tools::read_str;
 
 use self::actix_web::Error;
-use crate::dashboard::{dashboard_page, DashBoard, QCommand, dashboard_page_req, file_sender, upload_index, uploader};
+use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader};
 use crate::database::{validate_user, get_random_token, assign_cookie};
-use std::collections::HashMap;
 
+/// Returns the contents of styles.css
 fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     let styles_str = match read_str("styles/styles.css") {
         Ok(res) => res,
@@ -29,6 +28,7 @@ fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
+/// Returns the contents of lite.css
 fn get_lite_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     let styles_str = match read_str("styles/lite.css") {
         Ok(res) => res,
@@ -41,6 +41,7 @@ fn get_lite_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
+/// Returns the contents of dashboard.css
 fn get_dash_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     let styles_str = match read_str("styles/dashboard.css") {
         Ok(res) => res,
@@ -53,12 +54,15 @@ fn get_dash_styles() -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
+/// Info, used in the auth form when logging in
 #[derive(Deserialize)]
 struct LoginInfo {
     username: String,
     password: String,
 }
 
+
+/// Handles login requests when LoginInfo has been already sent
 fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
     println!("login_handler: {:?}", id.identity());
 
@@ -106,7 +110,8 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
     ")))
 }
 
-fn login_page(id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
+/// Returns standard login page with form for signing in
+fn login_page(_id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("\
     <!DOCTYPE html>
     <html>
@@ -132,6 +137,7 @@ fn login_page(id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
     </html>")))
 }
 
+/// Returns basic main page (currently there is only one button)
 fn main_page() -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
@@ -148,7 +154,20 @@ fn main_page() -> impl Future<Item=HttpResponse, Error=Error> {
     </html>")))
 }
 
-
+/// Runs all initial functions and starts the server.
+/// Reference to the mutexed config is needed
+///
+/// # Example
+/// ```rust
+/// use std::sync::{Arc, Mutex};
+/// use std::thread;
+/// use webify::config;
+/// use webify::server::run_server;
+///
+/// let config = Arc::new(Mutex::new(config::read_config::<config::Config>(config::DEFAULT_CONFIG_PATH).unwrap()));
+/// let handler = thread::spawn(move || run_server(config));
+/// assert!(handler.join().is_ok());
+/// ```
 pub fn run_server(a_config: Arc<Mutex<Config>>) {
     let config: Config = { a_config.lock().unwrap().clone() };
     let ds = match DashBoard::new(config.db_config) {
@@ -158,8 +177,6 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             return;
         }
     };
-
-    //let dashboarder = ds.dashboard_pager;
 
     match HttpServer::new(move || {
         App::new()

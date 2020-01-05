@@ -8,8 +8,8 @@ use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error};
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
-use futures::future::{err, Future, ok, Either, FutureResult};
-use futures::{IntoFuture, Stream, Sink};
+use futures::future::{err, Future, ok, Either};
+use futures::{IntoFuture, Stream};
 
 use actix_multipart::{Field, Multipart, MultipartError};
 
@@ -18,15 +18,9 @@ use crate::root_device::RootDev;
 use crate::device_trait::*;
 use std::io;
 use self::actix_web::http;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use crate::file_device::FileDevice;
-use std::cell::Cell;
-use std::fs;
-use std::io::Write;
-use self::actix_web::http::header::ContentDisposition;
-use diesel::query_dsl::InternalJoinDsl;
 use crate::printer_device::PrinterDevice;
-use std::borrow::Borrow;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -34,6 +28,29 @@ trait Device: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
 impl<T> Device for T where T: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
+
+/// Here we must tell you how requests are handled.
+///
+/// First of all, every request to the device should be formed as QCommand structure,
+/// and when QCommand goes to the Dispatch instance it should know what device has been requested to,
+/// and what type of request is it, group of rights are requested for this command, username of the requester,
+/// command itself and additional payload, which varies from command to command and from device to device.
+/// Remember that username should match the username got from cookies, and group of rights should match the command.
+/// Actually, group name is checked on the device side, not here. Here we check if the user has the access to the group.
+///
+/// After calling the right function (which is defined by `qtype`) of the right device (which is defined by the GET payload),
+/// with right group and username we send this QCommand to the device, where it handles group matching, matches the
+/// command with its own list and calls needed function with needed payload (sometimes username can be added to that payload).
+/// This function must generate actual HTML code to be inserted into the page, where all data is assembled via handlers
+///
+
+
+/// All requests to the device should be represented as QCommand.
+///  * `qtype` - one of these: "R" (read), "W" (write), "Q" (request), "C" (confirm), "D" (dismiss) or "S" (status)
+///  * `group` - requested group name
+///  * `username` - username of the user, who has made the request. Should match with username, got from database by cookie
+///  * `command` - name of the command, which is to be sent to the device
+///  * `payload` - additional data for the command, it can be everything you want
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct QCommand {
     pub qtype: String,
@@ -43,7 +60,7 @@ pub struct QCommand {
     pub payload: String,
 }
 
-
+/// Dispatches the QCommands between the devices. In most cases it just resolves the device by name
 #[derive(Clone)]
 struct Dispatch {
     file_device: FileDevice,
@@ -53,7 +70,7 @@ struct Dispatch {
 
 impl Dispatch {
     pub fn new(conn: Pool) -> Dispatch {
-        let filer = FileDevice::new(&conn);
+        let filer = FileDevice::new();
         Dispatch { printer_device: PrinterDevice::new(Arc::new(filer.clone())), file_device: filer, root_device: RootDev::new(&conn) }
     }
 
@@ -67,7 +84,7 @@ impl Dispatch {
     }
 }
 
-
+/// Stores all needed data and dispatcher, and handles all the requests to the devices.
 #[derive(Clone)]
 pub struct DashBoard {
     pub mapped_devices: HashMap<String, String>,
@@ -104,6 +121,7 @@ impl DashBoard {
         Ok(ds)
     }
 
+    /// Makes some validity checks and dispatches the command to the device's needed function
     pub fn dispatch(&self, username: &str, device: &str, query: QCommand) -> Result<String, String> {
         if username != query.username {
             return Err(format!("Wrong command credentials"));
@@ -177,7 +195,8 @@ fn get_available_info(dasher: &DashBoard, username: &str, device: &str) -> Strin
     }
 }
 
-pub fn dashboard_page(id: Identity, info: web::Path<(String)>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+/// Handles empty request to the dashboard
+pub fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -226,7 +245,8 @@ pub fn dashboard_page(id: Identity, info: web::Path<(String)>, mdata: web::Data<
                                        , get_available_info(&mdata, &user, info.as_str()))))
 }
 
-pub fn dashboard_page_req(id: Identity, info: web::Path<(String)>,
+/// Handles the QCommand requests
+pub fn dashboard_page_req(id: Identity, info: web::Path<String>,
                           form: web::Form<QCommand>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
     let cookie = match id.identity() {
         Some(data) => data,
@@ -282,7 +302,8 @@ pub fn dashboard_page_req(id: Identity, info: web::Path<(String)>,
         })))
 }
 
-pub fn file_sender(id: Identity, info: web::Path<(String)>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+/// Sends needed file to the user after security checks
+pub fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
     println!("File transfer");
     let cookie = match id.identity() {
         Some(data) => data,
@@ -319,8 +340,8 @@ pub fn file_sender(id: Identity, info: web::Path<(String)>, mdata: web::Data<Das
         .body(file_data))
 }
 
-
-pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<(String)>) -> impl Future<Item=HttpResponse, Error=Error> {
+/// Page for uploading the file
+pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<String>) -> impl Future<Item=HttpResponse, Error=Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -360,7 +381,7 @@ pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<(
     </html>"#, info.as_str())))
 }
 
-
+/// Handles the multiparted file
 fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> impl Future<Item=(), Error=Error> {
     let file_path_string = match field.content_disposition() {
         Some(c_d) => match c_d.get_filename() {
@@ -373,7 +394,7 @@ fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> 
 
     Either::B(
         field
-            .fold((0i64, mdata, username, full_path, path), move |(acc, mut dash, username, full_path, directory), bytes| {
+            .fold((0i64, mdata, username, full_path, path), move |(_acc, mut dash, username, full_path, directory), bytes| {
                 web::block(move || {
                     dash.dispatcher.file_device.write_file(&username, &full_path, &bytes).map_err(|e| {
                         println!("file.write_all failed: {}", e);
@@ -388,7 +409,7 @@ fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> 
                         }
                     })
             })
-            .map(|(acc, mut dash, username, full_path, directory)| {
+            .map(|(_acc, mut dash, username, full_path, directory)| {
                 match dash.dispatcher.file_device.finish_file(&username, &full_path, &directory) {
                     Ok(_) => (),
                     Err(e) => {
@@ -404,7 +425,8 @@ fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> 
     )
 }
 
-pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<(String)>) -> impl Future<Item=HttpResponse, Error=Error> {
+/// Handles the upload requests
+pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<String>) -> impl Future<Item=HttpResponse, Error=Error> {
     let res = multipart
         .then(move |field_r| {
             let cookie = match id.identity() {
@@ -433,7 +455,7 @@ pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>,
             }
             let field = match field_r {
                 Ok(d) => d,
-                Err(e) => return err(error::ErrorInternalServerError("Error on getting the file"))
+                Err(_e) => return err(error::ErrorInternalServerError("Error on getting the file"))
             };
 
             ok((field, user.clone(), info.to_string().replace("%2F", "/"), mdata.clone()))
@@ -443,5 +465,5 @@ pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>,
 
     res
         .map_err(|e| e.0)
-        .map(|d| HttpResponse::Ok().body("OK"))
+        .map(|_d| HttpResponse::Ok().body("OK"))
 }

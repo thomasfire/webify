@@ -1,7 +1,6 @@
 extern crate webify;
 
 use webify::server::run_server;
-use webify::io_tools;
 use webify::config;
 use std::env;
 use std::sync::{Arc, Mutex};
@@ -29,5 +28,5 @@ fn main() {
         }
     }
     let config = Arc::new(Mutex::new(config::read_config::<config::Config>(config::DEFAULT_CONFIG_PATH).unwrap()));
-    let handler = run_server(config);
+    let _handler = run_server(config);
 }

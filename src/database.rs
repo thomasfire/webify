@@ -3,20 +3,13 @@ extern crate crypto;
 extern crate serde_json;
 extern crate rand;
 
-use std::collections::{HashMap, HashSet, BTreeSet};
+use std::collections::{HashMap, BTreeSet};
 
 use rand::random;
-use std::error::Error;
 
-use chrono::NaiveDateTime;
 use diesel::connection::SimpleConnection;
-#[cfg(test)]
-use diesel::debug_query;
-use diesel::insert_into;
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
-#[cfg(test)]
-use diesel::sqlite::Sqlite;
 use diesel::result::Error as dError;
 
 use crate::models::{Groups, UserAdd, User, History, GroupAdd};
@@ -28,6 +21,7 @@ use self::crypto::sha2::Sha256;
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 
+/// Generates hash for the string. All password must go through this function
 fn get_hash(text: &str) -> String {
     let mut buff_str = text.to_string();
     for _x in 0..512 {
@@ -39,10 +33,12 @@ fn get_hash(text: &str) -> String {
     return buff_str;
 }
 
+/// Generates random token for the user
 pub fn get_random_token() -> String {
     get_hash(&(0..32).map(|_| random::<char>()).collect::<String>())
 }
 
+/// Returns the list of user groups
 pub fn get_user_groups(pool: &Pool, username: &str) -> Result<Vec<String>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -65,7 +61,7 @@ pub fn get_user_groups(pool: &Pool, username: &str) -> Result<Vec<String>, Strin
     Ok(res.split(",").map(|x| x.to_string()).collect())
 }
 
-
+/// Identifies user with the cookie
 pub fn get_user_from_cookie(pool: &Pool, cookie: &str) -> Result<String, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -84,6 +80,7 @@ pub fn get_user_from_cookie(pool: &Pool, cookie: &str) -> Result<String, String>
     }
 }
 
+/// Returns the vector of all devices which are allowed for use by user
 pub fn get_user_devices(pool: &Pool, devices_map: &HashMap<String, String>, username: &str) -> Result<Vec<String>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -109,6 +106,7 @@ pub fn get_user_devices(pool: &Pool, devices_map: &HashMap<String, String>, user
     }).map(|x| x.unwrap_or(&"".to_string()).to_string()).collect::<BTreeSet<String>>().iter().cloned().collect::<Vec<String>>())
 }
 
+/// Returns vector of all users as they are represented in the database
 pub fn get_all_users(pool: &Pool) -> Result<Vec<User>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -127,7 +125,7 @@ pub fn get_all_users(pool: &Pool) -> Result<Vec<User>, String> {
     Ok(users)
 }
 
-
+/// Returns vector of all history records as they are represented in the database
 pub fn get_all_history(pool: &Pool) -> Result<Vec<History>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -146,7 +144,7 @@ pub fn get_all_history(pool: &Pool) -> Result<Vec<History>, String> {
     Ok(hist)
 }
 
-
+/// Returns vector of all groups as they are represented in the database
 pub fn get_all_groups(pool: &Pool) -> Result<Vec<Groups>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -165,6 +163,7 @@ pub fn get_all_groups(pool: &Pool) -> Result<Vec<Groups>, String> {
     Ok(group)
 }
 
+/// Inserts new user to the database, cookies are not assigned yet
 pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&String>) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -192,6 +191,7 @@ pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&
     }
 }
 
+/// Inserts new group to the databse
 pub fn insert_group(pool: &Pool, group_name: &str, device: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -214,59 +214,61 @@ pub fn insert_group(pool: &Pool, group_name: &str, device: &str) -> Result<(), S
     }
 }
 
-
+/// Updates password for the user to the databse
 pub fn update_user_pass(pool: &Pool, username: &str, password: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
             conn
         }
-        Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
+        Err(err) => return Err(format!("Error on update_user_pass (connection): {:?}", err)),
     };
 
     match diesel::update(users::table.filter(users::columns::name.eq(username)))
         .set(users::columns::password.eq(get_hash(password)))
         .execute(&connection) {
         Ok(_) => Ok(()),
-        Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
+        Err(err) => Err(format!("Error on update_user_pass (update): {:?}", err))
     }
 }
 
+/// Writes groups for the user to the database
 pub fn update_user_group(pool: &Pool, username: &str, group: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
             conn
         }
-        Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
+        Err(err) => return Err(format!("Error on update_user_group (connection): {:?}", err)),
     };
 
     match diesel::update(users::table.filter(users::columns::name.eq(username)))
         .set(users::columns::groups.eq(group))
         .execute(&connection) {
         Ok(_) => Ok(()),
-        Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
+        Err(err) => Err(format!("Error on update_user_group (update): {:?}", err))
     }
 }
 
-
+/// Writes device for the group to the database
 pub fn update_group(pool: &Pool, g_name: &str, devices: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
             conn
         }
-        Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
+        Err(err) => return Err(format!("Error on update_group (connection): {:?}", err)),
     };
 
     match diesel::update(groups::table.filter(groups::columns::g_name.eq(g_name)))
         .set(groups::columns::devices.eq(devices))
         .execute(&connection) {
         Ok(_) => Ok(()),
-        Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
+        Err(err) => Err(format!("Error on update_group (update): {:?}", err))
     }
 }
 
+/// Writes cookies for the user to the database
 pub fn assign_cookie(pool: &Pool, username: &str, cookie: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -284,6 +286,7 @@ pub fn assign_cookie(pool: &Pool, username: &str, cookie: &str) -> Result<(), St
     }
 }
 
+/// Returns whether user has access to the group
 pub fn has_access_to_group(pool: &Pool, username: &str, group_name: &str) -> Result<bool, String> {
     let user_groups = match get_user_groups(pool, username) {
         Ok(data) => data,
@@ -296,6 +299,7 @@ pub fn has_access_to_group(pool: &Pool, username: &str, group_name: &str) -> Res
     Ok(false)
 }
 
+/// Returns whether user has access to the device, or not
 pub fn has_access_to_device(pool: &Pool, dev_map: &HashMap<String, String>, username: &str, device: &str) -> Result<bool, String> {
     let user_dev = match get_user_devices(pool, dev_map, username) {
         Ok(data) => data,
@@ -308,7 +312,17 @@ pub fn has_access_to_device(pool: &Pool, dev_map: &HashMap<String, String>, user
     Ok(false)
 }
 
-
+/// Returns whether the user has correct credentials or not.
+/// Also manages the counter of unsuccessful logins. Currently it is allowed to make 10 wrong
+/// attempts for user before blocking the account. Every successful login resets the counter to 0.
+///
+/// # Example
+/// ```rust
+/// use webify::database::{get_connection, validate_user};
+/// let conns = get_connection(&"database.db".to_string()).unwrap();
+/// assert!(validate_user(&conns, "thomasfire", "bestpasswort").unwrap());
+/// assert_ne!(validate_user(&conns, "eva", "badpasswort").unwrap());
+/// ```
 pub fn validate_user(pool: &Pool, username: &str, password: &str) -> Result<bool, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -363,7 +377,15 @@ pub fn validate_user(pool: &Pool, username: &str, password: &str) -> Result<bool
     }
 }
 
-
+/// Returns the devices map by their group name : {group_name: device_name};
+///
+/// # Examples
+/// ```rust
+/// use webify::database::{get_connection, on_init};
+/// let conns = get_connection(&"database.db".to_string()).unwrap();
+/// let device_by_group = on_init(&conns).unwrap();
+/// assert_eq!(device_by_group.get("filer_read"), "filer");
+/// ```
 pub fn on_init(pool: &Pool) -> Result<HashMap<String, String>, String> {
     let connection = match pool.get() {
         Ok(conn) => {
@@ -390,6 +412,13 @@ pub fn on_init(pool: &Pool) -> Result<HashMap<String, String>, String> {
     Ok(devices_map)
 }
 
+/// Returns the connection pool by the path to the database
+///
+/// # Example
+/// ```rust
+/// use webify::database::get_connection;
+/// let connections = get_connection(&"database.db".to_string()).unwrap();
+/// ```
 pub fn get_connection(db_config: &String) -> Result<Pool, String> {
     let manager = ConnectionManager::<SqliteConnection>::new(db_config);
     match Pool::builder().build(manager) {
@@ -398,6 +427,13 @@ pub fn get_connection(db_config: &String) -> Result<Pool, String> {
     }
 }
 
+/// Writes initial data to the database: tables and list of groups
+///
+/// # Example
+/// ```rust
+/// use webify::database::init_db;
+/// init_db(&"database.db".to_string()).unwrap();
+/// ```
 pub fn init_db(db_config: &String) -> Result<(), String> {
     let r_pool = get_connection(db_config);
     let pool = match r_pool {

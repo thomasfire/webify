@@ -5,13 +5,9 @@ use crate::file_device::FileDevice;
 use crate::io_tools;
 use std::process::Command;
 use std::fs::{remove_file, remove_dir_all, create_dir_all};
-use diesel::{SqliteConnection, r2d2};
-use diesel::r2d2::ConnectionManager;
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
 use crate::io_tools::exists;
-
-type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PrinterConfig {
