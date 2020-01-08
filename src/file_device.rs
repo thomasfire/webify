@@ -2,8 +2,6 @@ use crate::device_trait::*;
 
 use std::io::prelude::*;
 
-use diesel::{r2d2, SqliteConnection};
-use diesel::r2d2::ConnectionManager;
 use crate::dashboard::QCommand;
 use std::fs;
 use crate::io_tools::exists;

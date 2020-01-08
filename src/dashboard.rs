@@ -229,6 +229,9 @@ pub fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<Da
                         {}
                     </div>
                 </div>
+                <div class=\"logout\">
+                    <a href=\"../logout\">Log out</a>
+                </div>
             </div>
             <div class=\"info\">
                 <div class=\"inforow\">
@@ -282,6 +285,9 @@ pub fn dashboard_page_req(id: Identity, info: web::Path<String>,
                         Available devices: <br>
                         {}
                     </div>
+                </div>
+                <div class=\"logout\">
+                    <a href=\"../logout\">Log out</a>
                 </div>
             </div>
             <div class=\"info\">

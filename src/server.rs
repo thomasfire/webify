@@ -11,9 +11,9 @@ use futures::future::{Future, ok};
 use crate::config::Config;
 use crate::io_tools::read_str;
 
-use self::actix_web::Error;
+use self::actix_web::{Error, http};
 use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader};
-use crate::database::{validate_user, get_random_token, assign_cookie};
+use crate::database::{validate_user, get_random_token, assign_cookie, remove_cookie};
 
 /// Returns the contents of styles.css
 fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
@@ -110,6 +110,24 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
     ")))
 }
 
+fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+    let cookie = match id.identity() {
+        Some(data) => data,
+        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+    };
+
+    id.forget();
+
+    match remove_cookie(&mdata.connections, &cookie) {
+        Ok(_) => { println!("Logout") }
+        Err(e) => {
+            eprintln!("Error on removing cookies: {}", e);
+        }
+    };
+
+    ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/main").finish())
+}
+
 /// Returns standard login page with form for signing in
 fn login_page(_id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
     ok(HttpResponse::Ok().body(format!("\
@@ -191,6 +209,7 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/main").to_async(main_page))
             .service(web::resource("/").to_async(main_page))
             .service(web::resource("/login").to_async(login_page))
+            .service(web::resource("/logout").to_async(logout_handler))
             .service(web::resource("/get_logged_in").route(web::post().to_async(login_handler)))
             .service(web::resource("/dashboard/{device}")
                 .route(web::post().to_async(dashboard_page_req))

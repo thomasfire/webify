@@ -286,6 +286,24 @@ pub fn assign_cookie(pool: &Pool, username: &str, cookie: &str) -> Result<(), St
     }
 }
 
+/// Removes cookie from database, making it impossible to log in
+pub fn remove_cookie(pool: &Pool, cookie: &str) -> Result<(), String> {
+    let connection = match pool.get() {
+        Ok(conn) => {
+            println!("Got connection");
+            conn
+        }
+        Err(err) => return Err(format!("Error on remove_cookie (connection): {:?}", err)),
+    };
+
+    match diesel::update(users::table.filter(users::columns::cookie.eq(cookie)))
+        .set(users::columns::cookie.eq(None as Option<String>))
+        .execute(&connection) {
+        Ok(_) => Ok(()),
+        Err(err) => Err(format!("Error on remove_cookie (update): {:?}", err))
+    }
+}
+
 /// Returns whether user has access to the group
 pub fn has_access_to_group(pool: &Pool, username: &str, group_name: &str) -> Result<bool, String> {
     let user_groups = match get_user_groups(pool, username) {

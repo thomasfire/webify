@@ -26,6 +26,9 @@ $ sudo dnf install rust cargo rust-src rust-doc \
   rust-debugger-common rust-lldb rust-gdb rustfmt rust-packaging # for developing
 ```
 
+As Webify works with SQLite as database, make sure you have installed the `libsqlite3-dev` 
+on Debian or `sqlite-devel` on Fedora
+
 Build on Linux is pretty simple:
 ```shell script
 $ ./build.sh build  # for debug version

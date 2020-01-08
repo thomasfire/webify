@@ -18,7 +18,7 @@ body {
   margin-left: 160px;
   padding: 0px 10px;
 }
-.devitem a {
+.devitem a, .logout a {
   padding: 6px 8px 6px 16px;
   text-decoration: none;
   font-size: 25px;
@@ -26,6 +26,14 @@ body {
   display: block;
 }
 
+.logout {
+  padding: 10px 10px 10px 10px;
+  display: block;
+  position: absolute;
+  bottom: 25px;
+  width: 100%;
+  height: 50px;
+}
 
 .utable td {
   border-collapse: collapse;
