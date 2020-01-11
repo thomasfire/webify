@@ -21,8 +21,8 @@ pub mod web_device;
 You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.40).
 You can easily install it on Fedora 31:
 ```shell script
-$ sudo dnf install rust cargo # for building only
-$ sudo dnf install rust cargo rust-src rust-doc \
+$ sudo dnf install rust cargo openssl # for building only
+$ sudo dnf install rust cargo openssl rust-src rust-doc \
   rust-debugger-common rust-lldb rust-gdb rustfmt rust-packaging # for developing
 ```
 
@@ -40,6 +40,8 @@ to place you want. Go to that place and run:
 ```shell script
 $ ./webify --setup  # configure the database, address and printer
 $ ./webify --uadd   # add your first user, remember that it must contain all the groups you need
+$ openssl genrsa 4096 > key.pem  # generate key for TLS
+$ openssl req -x509 -days 1000 -new -key key.pem -out cert.pem  # generate certificate for TLS
 ```
 
 After this you can just run the server:

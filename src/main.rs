@@ -5,6 +5,7 @@ use webify::config;
 use std::env;
 use std::sync::{Arc, Mutex};
 
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {

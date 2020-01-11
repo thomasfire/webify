@@ -65,7 +65,7 @@ impl FileDevice {
     }
 
     /// Writes content to the the RAM
-    pub fn write_file(&mut self, username: &str, payload: &str, data: &[u8]) -> Result<(), String> {
+    pub fn write_file(&self, username: &str, payload: &str, data: &[u8]) -> Result<(), String> {
         if payload.contains("..") {
             return Err("Wrong symbols were supplied".to_string());
         }
@@ -92,7 +92,7 @@ impl FileDevice {
     }
 
     /// Writes file from buffer to the disk after being compressed
-    pub fn finish_file(&mut self, username: &str, payload: &str, directory: &str) -> Result<(), String> {
+    pub fn finish_file(&self, username: &str, payload: &str, directory: &str) -> Result<(), String> {
         let filepath = format!("{}/{}", &self.storage, username);
 
         let mut file = if exists(&format!("{}/{}", filepath, directory)) {

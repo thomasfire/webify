@@ -2,11 +2,12 @@ extern crate actix_web;
 extern crate form_data;
 
 use std::sync::{Arc, Mutex};
+use std::fs::File;
+use std::io::BufReader;
 
 use actix_identity::{CookieIdentityPolicy, IdentityService};
 use actix_identity::Identity;
 use actix_web::{App, HttpResponse, HttpServer, middleware, web};
-use futures::future::{Future, ok};
 
 use crate::config::Config;
 use crate::io_tools::read_str;
@@ -14,9 +15,11 @@ use crate::io_tools::read_str;
 use self::actix_web::{Error, http};
 use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader};
 use crate::database::{validate_user, get_random_token, assign_cookie, remove_cookie};
+use rustls::internal::pemfile::{certs, rsa_private_keys};
+use rustls::{NoClientAuth, ServerConfig};
 
 /// Returns the contents of styles.css
-fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
+async fn get_styles() -> Result<HttpResponse, Error> {
     let styles_str = match read_str("styles/styles.css") {
         Ok(res) => res,
         Err(err) => {
@@ -25,11 +28,11 @@ fn get_styles() -> impl Future<Item=HttpResponse, Error=Error> {
         }
     };
 
-    ok(HttpResponse::Ok().body(format!("{}", styles_str)))
+    Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
 /// Returns the contents of lite.css
-fn get_lite_styles() -> impl Future<Item=HttpResponse, Error=Error> {
+async fn get_lite_styles() -> Result<HttpResponse, Error> {
     let styles_str = match read_str("styles/lite.css") {
         Ok(res) => res,
         Err(err) => {
@@ -38,11 +41,11 @@ fn get_lite_styles() -> impl Future<Item=HttpResponse, Error=Error> {
         }
     };
 
-    ok(HttpResponse::Ok().body(format!("{}", styles_str)))
+    Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
 /// Returns the contents of dashboard.css
-fn get_dash_styles() -> impl Future<Item=HttpResponse, Error=Error> {
+async fn get_dash_styles() -> Result<HttpResponse, Error> {
     let styles_str = match read_str("styles/dashboard.css") {
         Ok(res) => res,
         Err(err) => {
@@ -51,7 +54,7 @@ fn get_dash_styles() -> impl Future<Item=HttpResponse, Error=Error> {
         }
     };
 
-    ok(HttpResponse::Ok().body(format!("{}", styles_str)))
+    Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
 /// Info, used in the auth form when logging in
@@ -63,7 +66,7 @@ struct LoginInfo {
 
 
 /// Handles login requests when LoginInfo has been already sent
-fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
     println!("login_handler: {:?}", id.identity());
 
     let nick = form.username.clone();
@@ -73,12 +76,12 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error on handling login: {}", e);
-            return ok(HttpResponse::InternalServerError().body(format!("Error on login")));
+            return Ok(HttpResponse::InternalServerError().body(format!("Error on login")));
         }
     };
 
     if !validated {
-        return ok(HttpResponse::Ok().body("Incorrect login or password"));
+        return Ok(HttpResponse::Ok().body("Incorrect login or password"));
     }
 
     let token = get_random_token();
@@ -91,7 +94,7 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
         }
     };
 
-    ok(HttpResponse::Ok().body(format!("
+    Ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
     <html>
     <link rel=\"stylesheet\" type=\"text/css\" href=\"lite.css\" media=\"screen\" />
@@ -110,10 +113,10 @@ fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<Dash
     ")))
 }
 
-fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+async fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
-        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
     id.forget();
@@ -125,12 +128,12 @@ fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> impl Future<Item
         }
     };
 
-    ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/main").finish())
+    Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/main").finish())
 }
 
 /// Returns standard login page with form for signing in
-fn login_page(_id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
-    ok(HttpResponse::Ok().body(format!("\
+async fn login_page(_id: Identity) -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::Ok().body(format!("\
     <!DOCTYPE html>
     <html>
     <link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\" media=\"screen\" />
@@ -156,8 +159,8 @@ fn login_page(_id: Identity) -> impl Future<Item=HttpResponse, Error=Error> {
 }
 
 /// Returns basic main page (currently there is only one button)
-fn main_page() -> impl Future<Item=HttpResponse, Error=Error> {
-    ok(HttpResponse::Ok().body(format!("
+async fn main_page() -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
     <html>
     <link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\" media=\"screen\" />
@@ -186,7 +189,8 @@ fn main_page() -> impl Future<Item=HttpResponse, Error=Error> {
 /// let handler = thread::spawn(move || run_server(config));
 /// assert!(handler.join().is_ok());
 /// ```
-pub fn run_server(a_config: Arc<Mutex<Config>>) {
+#[actix_rt::main]
+pub async fn run_server(a_config: Arc<Mutex<Config>>) {
     let config: Config = { a_config.lock().unwrap().clone() };
     let ds = match DashBoard::new(config.db_config) {
         Ok(data) => data,
@@ -196,7 +200,17 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
         }
     };
 
-    match HttpServer::new(move || {
+    let mut config_tls = ServerConfig::new(NoClientAuth::new());
+    let cert_file = &mut BufReader::new(File::open("cert.pem").unwrap());
+    let key_file = &mut BufReader::new(File::open("key.pem").unwrap());
+
+    let cert_chain = certs(cert_file).unwrap();
+    let mut keys = rsa_private_keys(key_file).unwrap();
+
+    config_tls.set_single_cert(cert_chain, keys.remove(0)).unwrap();
+
+
+    HttpServer::new(move || {
         App::new()
             .wrap(IdentityService::new(
                 CookieIdentityPolicy::new(&[0; 32])
@@ -206,30 +220,27 @@ pub fn run_server(a_config: Arc<Mutex<Config>>) {
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
             .data(ds.clone())
-            .service(web::resource("/main").to_async(main_page))
-            .service(web::resource("/").to_async(main_page))
-            .service(web::resource("/login").to_async(login_page))
-            .service(web::resource("/logout").to_async(logout_handler))
-            .service(web::resource("/get_logged_in").route(web::post().to_async(login_handler)))
+            .service(web::resource("/main").to(main_page))
+            .service(web::resource("/").to(main_page))
+            .service(web::resource("/login").to(login_page))
+            .service(web::resource("/logout").to(logout_handler))
+            .service(web::resource("/get_logged_in").route(web::post().to(login_handler)))
             .service(web::resource("/dashboard/{device}")
-                .route(web::post().to_async(dashboard_page_req))
-                .route(web::get().to_async(dashboard_page)))
-            .service(web::resource("/dashboard/{device}").to_async(dashboard_page))
-            .service(web::resource("/styles.css").to_async(get_styles))
-            .service(web::resource("/lite.css").to_async(get_lite_styles))
-            .service(web::resource("/dashboard.css").to_async(get_dash_styles))
-            .service(web::resource("/download/{path}").to_async(file_sender))
+                .route(web::post().to(dashboard_page_req))
+                .route(web::get().to(dashboard_page)))
+            .service(web::resource("/dashboard/{device}").to(dashboard_page))
+            .service(web::resource("/styles.css").to(get_styles))
+            .service(web::resource("/lite.css").to(get_lite_styles))
+            .service(web::resource("/dashboard.css").to(get_dash_styles))
+            .service(web::resource("/download/{path}").to(file_sender))
             .service(
                 web::resource("/upload/{path}")
-                    .route(web::get().to_async(upload_index))
-                    .route(web::post().to_async(uploader)),
+                    .route(web::get().to(upload_index))
+                    .route(web::post().to(uploader)),
             )
     }
     )
-        .bind(config.bind_address)
+        .bind_rustls(config.bind_address, config_tls)
         .unwrap()
-        .run() {
-        Ok(_) => println!("Server has been started."),
-        Err(e) => eprintln!("Error on starting the server: {:?}", e)
-    };
+        .run().await.unwrap();
 }

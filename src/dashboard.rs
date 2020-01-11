@@ -8,15 +8,13 @@ use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error};
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
-use futures::future::{err, Future, ok, Either};
-use futures::{IntoFuture, Stream};
+use futures::StreamExt;
 
-use actix_multipart::{Field, Multipart, MultipartError};
+use actix_multipart::Multipart;
 
 use crate::database::{get_connection, get_user_devices, get_user_from_cookie, on_init, has_access_to_device, has_access_to_group};
 use crate::root_device::RootDev;
 use crate::device_trait::*;
-use std::io;
 use self::actix_web::http;
 use std::sync::Arc;
 use crate::file_device::FileDevice;
@@ -196,22 +194,22 @@ fn get_available_info(dasher: &DashBoard, username: &str, device: &str) -> Strin
 }
 
 /// Handles empty request to the dashboard
-pub fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
-        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
     let user = match get_user_from_cookie(&mdata.connections, &cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in dashboard_page at getting the user: {:?}", e);
-            return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
 
 
-    ok(HttpResponse::Ok().body(format!("
+    Ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
     <html>
     <head>
@@ -249,26 +247,26 @@ pub fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<Da
 }
 
 /// Handles the QCommand requests
-pub fn dashboard_page_req(id: Identity, info: web::Path<String>,
-                          form: web::Form<QCommand>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
+                                form: web::Form<QCommand>, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
-        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
     let user = match get_user_from_cookie(&mdata.connections, &cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in dashboard_page_req at getting the user: {:?}", e);
-            return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
 
     if user != form.username {
-        return ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
+        return Ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
     }
 
-    ok(HttpResponse::Ok().body(format!("
+    Ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
     <html>
     <head>
@@ -309,18 +307,18 @@ pub fn dashboard_page_req(id: Identity, info: web::Path<String>,
 }
 
 /// Sends needed file to the user after security checks
-pub fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> impl Future<Item=HttpResponse, Error=Error> {
+pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
     println!("File transfer");
     let cookie = match id.identity() {
         Some(data) => data,
-        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
     let user = match get_user_from_cookie(&mdata.connections, &cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in file_sender at getting the user: {:?}", e);
-            return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
 
@@ -328,7 +326,7 @@ pub fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashB
         Ok(d) => d,
         Err(e) => {
             eprintln!("Error on getting the file: {}", e);
-            return ok(HttpResponse::BadRequest().body(format!("<html>
+            return Ok(HttpResponse::BadRequest().body(format!("<html>
         <link rel=\"stylesheet\" type=\"text/css\" href=\"lite.css\" media=\"screen\" />\
         <body>
             <p class=\"error\">
@@ -340,24 +338,24 @@ pub fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashB
     };
 
     println!("File size: {}", file_data.len());
-    ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "multipart/form-data")
+    Ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "multipart/form-data")
         .set_header(http::header::CONTENT_LENGTH, file_data.len())
         .set_header(http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", info.as_str().split("%2F").collect::<Vec<&str>>().pop().unwrap_or("some_file")))
         .body(file_data))
 }
 
 /// Page for uploading the file
-pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<String>) -> impl Future<Item=HttpResponse, Error=Error> {
+pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<String>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
-        None => return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
     let user = match get_user_from_cookie(&mdata.connections, &cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in upload_index at getting the user: {:?}", e);
-            return ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
 
@@ -365,15 +363,15 @@ pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<S
         Ok(d) => d,
         Err(e) => {
             eprintln!("Error on dispatching (getting access to group): {}", e);
-            return ok(HttpResponse::InternalServerError().body("Error on dispatching".to_string()));
+            return Ok(HttpResponse::InternalServerError().body("Error on dispatching".to_string()));
         }
     };
 
     if !gaccess {
-        return ok(HttpResponse::Forbidden().body("You are not allowed to upload files"));
+        return Ok(HttpResponse::Forbidden().body("You are not allowed to upload files"));
     }
 
-    ok(HttpResponse::Ok().body(format!(r#"<html>
+    Ok(HttpResponse::Ok().body(format!(r#"<html>
         <head><title>Upload to Filer</title></head>
         <link rel="stylesheet" type="text/css" href="lite.css" media="screen" />
         <body>
@@ -386,7 +384,7 @@ pub fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<S
         </body>
     </html>"#, info.as_str())))
 }
-
+/*
 /// Handles the multiparted file
 fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> impl Future<Item=(), Error=Error> {
     let file_path_string = match field.content_disposition() {
@@ -429,47 +427,69 @@ fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> 
                 error::ErrorInternalServerError(e)
             }),
     )
-}
+}*/
 
 /// Handles the upload requests
-pub fn uploader(id: Identity, multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<String>) -> impl Future<Item=HttpResponse, Error=Error> {
-    let res = multipart
-        .then(move |field_r| {
-            let cookie = match id.identity() {
-                Some(data) => data,
-                None => return err(error::ErrorUnauthorized("Unauthorized")),
-            };
+pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<String>) -> Result<HttpResponse, Error> {
+    let cookie = match id.identity() {
+        Some(data) => data,
+        None => return Err(error::ErrorUnauthorized("Unauthorized")),
+    };
 
-            let user = match get_user_from_cookie(&mdata.connections, &cookie) {
-                Ok(data) => data,
-                Err(e) => {
-                    eprintln!("Error in uploader at getting the user: {:?}", e);
-                    return err(error::ErrorNotFound("Unauthorized")).into_future();
-                }
-            };
+    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error in uploader at getting the user: {:?}", e);
+            return Err(error::ErrorNotFound("Unauthorized"));
+        }
+    };
 
-            let gaccess = match has_access_to_group(&mdata.connections, &user, "filer_write") {
+    let gaccess = match has_access_to_group(&mdata.connections, &user, "filer_write") {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Error on uploader (getting access to group): {}", e);
+            return Err(error::ErrorForbidden("You are not allowed"));
+        }
+    };
+
+    if !gaccess {
+        return Err(error::ErrorForbidden("You are not allowed"));
+    }
+
+
+    while let Some(item) = multipart.next().await {
+        let mut field = match item {
+            Ok(f) => f,
+            Err(e) => return Err(error::ErrorBadRequest(format!("Bad item: {:?}", e)))
+        };
+        let file_path_string = match field.content_disposition() {
+            Some(c_d) => match c_d.get_filename() {
+                Some(filename) => filename.replace(' ', "_").to_string(),
+                None => return Err(error::ErrorBadRequest("No content-disposition"))
+            },
+            None => return Err(error::ErrorBadRequest("No content-disposition"))
+        };
+        let directory = info.to_string().replace("%2F", "/");
+        let full_path = format!("{}/{}", directory, file_path_string);
+
+        // Field in turn is stream of *Bytes* object
+        while let Some(chunk) = field.next().await {
+            let data = match chunk {
                 Ok(d) => d,
-                Err(e) => {
-                    eprintln!("Error on uploader (getting access to group): {}", e);
-                    return err(error::ErrorForbidden("You are not allowed")).into_future();
-                }
+                Err(e) => return Err(error::ErrorInternalServerError(format!("Error on getting data chunk: {:?}", e)))
             };
-
-            if !gaccess {
-                return err(error::ErrorForbidden("You are not allowed"));
-            }
-            let field = match field_r {
-                Ok(d) => d,
-                Err(_e) => return err(error::ErrorInternalServerError("Error on getting the file"))
+            // filesystem operations are blocking, we have to use threadpool
+            match mdata.dispatcher.file_device.write_file(&user, &full_path, data.as_ref()) {
+                Ok(_d) => (),
+                Err(e) => return Err(error::ErrorInternalServerError(format!("Error on writing to buffer: {}", e)))
             };
+        }
 
-            ok((field, user.clone(), info.to_string().replace("%2F", "/"), mdata.clone()))
-        }).and_then(|(field, username, path, mdata)| {
-        return save_file(field, username, path, mdata.get_ref().clone());
-    }).into_future();
+        match mdata.dispatcher.file_device.finish_file(&user, &full_path, &directory) {
+            Ok(_d) => (),
+            Err(e) => return Err(error::ErrorInternalServerError(format!("Error on writing to disk: {}", e)))
+        };
+    }
 
-    res
-        .map_err(|e| e.0)
-        .map(|_d| HttpResponse::Ok().body("OK"))
+    Ok(HttpResponse::Ok().body("OK"))
 }

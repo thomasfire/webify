@@ -29,7 +29,7 @@ pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
 pub fn read_config<T: Serialize + DeserializeOwned + Clone>(conf_path: &str) -> Result<T, String>
 {
     if !io_tools::exists(conf_path) {
-        panic!("No `config.toml` file, run `$ teleprint --setup` ");
+        panic!("No `config.toml` file, run `$ webify --setup` ");
     }
     let config_str = match io_tools::read_str(conf_path) {
         Ok(v) => v,
