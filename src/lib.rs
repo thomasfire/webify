@@ -14,3 +14,4 @@ pub mod device_trait;
 pub mod root_device;
 pub mod file_device;
 pub mod printer_device;
+pub mod file_cache;

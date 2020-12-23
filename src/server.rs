@@ -11,6 +11,7 @@ use actix_web::{App, HttpResponse, HttpServer, middleware, web};
 
 use crate::config::Config;
 use crate::io_tools::read_str;
+use crate::file_cache::FileCache;
 
 use self::actix_web::{Error, http};
 use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader};
@@ -42,6 +43,18 @@ async fn get_lite_styles() -> Result<HttpResponse, Error> {
     };
 
     Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
+}
+
+async fn get_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    let static_str = match mdata.get_ref().clone().get_str_file(&info.0) {
+        Ok(res) => res,
+        Err(err) => {
+            eprintln!("Error on reading static file: {}", err);
+            format!("")
+        }
+    };
+
+    Ok(HttpResponse::Ok().body(format!("{}", static_str)))
 }
 
 /// Returns the contents of dashboard.css
@@ -199,6 +212,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
             return;
         }
     };
+    let stat_files = FileCache::new();
 
     let mut config_tls = ServerConfig::new(NoClientAuth::new());
     let cert_file = &mut BufReader::new(File::open("cert.pem").unwrap());
@@ -220,6 +234,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
             // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::Logger::default())
             .data(ds.clone())
+            .data(stat_files.clone())
             .service(web::resource("/main").to(main_page))
             .service(web::resource("/").to(main_page))
             .service(web::resource("/login").to(login_page))
@@ -231,6 +246,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/dashboard/{device}").to(dashboard_page))
             .service(web::resource("/styles.css").to(get_styles))
             .service(web::resource("/lite.css").to(get_lite_styles))
+            .service(web::resource("/static/{path}").to(get_static_file))
             .service(web::resource("/dashboard.css").to(get_dash_styles))
             .service(web::resource("/download/{path}").to(file_sender))
             .service(
