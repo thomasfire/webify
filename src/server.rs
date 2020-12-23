@@ -1,5 +1,5 @@
 extern crate actix_web;
-extern crate form_data;
+extern crate actix_form_data;
 
 use std::sync::{Arc, Mutex};
 use std::fs::File;
