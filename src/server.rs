@@ -10,7 +10,6 @@ use actix_identity::Identity;
 use actix_web::{App, HttpResponse, HttpServer, middleware, web};
 
 use crate::config::Config;
-use crate::io_tools::read_str;
 use crate::file_cache::FileCache;
 
 use self::actix_web::{Error, http};
@@ -18,32 +17,6 @@ use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sende
 use crate::database::{validate_user, get_random_token, assign_cookie, remove_cookie};
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
-
-/// Returns the contents of styles.css
-async fn get_styles() -> Result<HttpResponse, Error> {
-    let styles_str = match read_str("styles/styles.css") {
-        Ok(res) => res,
-        Err(err) => {
-            eprintln!("Error on reading styles: {}", err);
-            format!("")
-        }
-    };
-
-    Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
-}
-
-/// Returns the contents of lite.css
-async fn get_lite_styles() -> Result<HttpResponse, Error> {
-    let styles_str = match read_str("styles/lite.css") {
-        Ok(res) => res,
-        Err(err) => {
-            eprintln!("Error on reading styles: {}", err);
-            format!("")
-        }
-    };
-
-    Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
-}
 
 async fn get_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     let static_str = match mdata.get_ref().clone().get_str_file(&info.0) {
@@ -55,19 +28,6 @@ async fn get_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -
     };
 
     Ok(HttpResponse::Ok().body(format!("{}", static_str)))
-}
-
-/// Returns the contents of dashboard.css
-async fn get_dash_styles() -> Result<HttpResponse, Error> {
-    let styles_str = match read_str("styles/dashboard.css") {
-        Ok(res) => res,
-        Err(err) => {
-            eprintln!("Error on reading styles: {}", err);
-            format!("")
-        }
-    };
-
-    Ok(HttpResponse::Ok().body(format!("{}", styles_str)))
 }
 
 /// Info, used in the auth form when logging in
@@ -110,7 +70,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     Ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
     <html>
-    <link rel=\"stylesheet\" type=\"text/css\" href=\"lite.css\" media=\"screen\" />
+    <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/lite.css\" media=\"screen\" />
     <head>
         <title>Webify Main</title>
     </head>
@@ -149,7 +109,7 @@ async fn login_page(_id: Identity) -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().body(format!("\
     <!DOCTYPE html>
     <html>
-    <link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\" media=\"screen\" />
+    <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/styles.css\" media=\"screen\" />
     <head>
         <title>Webify Main</title>
     </head>
@@ -176,7 +136,7 @@ async fn main_page() -> Result<HttpResponse, Error> {
     Ok(HttpResponse::Ok().body(format!("
     <!DOCTYPE html>
     <html>
-    <link rel=\"stylesheet\" type=\"text/css\" href=\"styles.css\" media=\"screen\" />
+    <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/styles.css\" media=\"screen\" />
     <head>
         <title>Webify Main</title>
     </head>
@@ -244,10 +204,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
                 .route(web::post().to(dashboard_page_req))
                 .route(web::get().to(dashboard_page)))
             .service(web::resource("/dashboard/{device}").to(dashboard_page))
-            .service(web::resource("/styles.css").to(get_styles))
-            .service(web::resource("/lite.css").to(get_lite_styles))
             .service(web::resource("/static/{path}").to(get_static_file))
-            .service(web::resource("/dashboard.css").to(get_dash_styles))
             .service(web::resource("/download/{path}").to(file_sender))
             .service(
                 web::resource("/upload/{path}")

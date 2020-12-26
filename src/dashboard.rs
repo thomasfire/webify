@@ -214,7 +214,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
     <html>
     <head>
         <title>Webify Dashboard</title>
-        <link rel=\"stylesheet\" type=\"text/css\" href=\"../dashboard.css\" media=\"screen\" />
+        <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/dashboard.css\" media=\"screen\" />
     </head>
     <body>
 
@@ -271,7 +271,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
     <html>
     <head>
         <title>Webify Dashboard</title>
-        <link rel=\"stylesheet\" type=\"text/css\" href=\"../dashboard.css\" media=\"screen\" />
+        <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/dashboard.css\" media=\"screen\" />
     </head>
     <body>
 
@@ -327,7 +327,7 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
         Err(e) => {
             eprintln!("Error on getting the file: {}", e);
             return Ok(HttpResponse::BadRequest().body(format!("<html>
-        <link rel=\"stylesheet\" type=\"text/css\" href=\"lite.css\" media=\"screen\" />\
+        <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/lite.css\" media=\"screen\" />\
         <body>
             <p class=\"error\">
         Error on getting the file `{}`: {}
@@ -373,7 +373,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::
 
     Ok(HttpResponse::Ok().body(format!(r#"<html>
         <head><title>Upload to Filer</title></head>
-        <link rel="stylesheet" type="text/css" href="lite.css" media="screen" />
+        <link rel="stylesheet" type="text/css" href="/static/lite.css" media="screen" />
         <body>
             <div class="uploader">
                 <form target="/{}" method="post" enctype="multipart/form-data">

@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::fs::File;
 use std::sync::{RwLock, Arc};
 
-#[derive(Clone, Default, )]
+#[derive(Clone, Default)]
 pub struct FileCache {
     files: Arc<RwLock<BTreeMap<String, Vec<u8>>>>
 }
@@ -16,18 +16,22 @@ impl FileCache {
         self.files.write().unwrap().clear();
     }
     pub fn get_byte_file(&mut self, filename: &str) -> Result<Vec<u8>, String> {
-        match self.files.read().unwrap().get(filename) {
+        if filename.contains("/") || filename.contains("..") {
+            return Err(format!("Access to the {} is denied", filename));
+        }
+        let full_path = format!("static/{}", filename);
+        match self.files.read().unwrap().get(&full_path) {
             Some(value) => return Ok(value.clone()),
             None => println!("Loading `{}` into cache", filename)
         };
-        let mut file = match File::open(filename) {
+        let mut file = match File::open(&full_path) {
             Ok(f) => f,
             Err(e) => return Err(format!("Error on opening the file: {:?}", e))
         };
 
         let mut file_data: Vec<u8> = vec![];
         match file.read_to_end(&mut file_data) {
-            Ok(_) => self.files.write().unwrap().insert(filename.to_string(), file_data.clone()),
+            Ok(_) => self.files.write().unwrap().insert(full_path, file_data.clone()),
             Err(err) => return Err(format!("Error on reading the file: {:?}", err))
         };
         Ok(file_data)

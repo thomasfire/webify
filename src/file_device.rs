@@ -148,6 +148,9 @@ impl FileDevice {
         if !exists(&filepath) {
             return Err("No container was found".to_string());
         }
+        if payload.contains("..") {
+            return Err("Bad request".to_string());
+        }
         let full_path = format!("{}/{}", filepath, payload);
         let entries = match fs::read_dir(&full_path) {
             Ok(f) => f,
