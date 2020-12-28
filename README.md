@@ -18,11 +18,11 @@ pub mod web_device;
  You can see the working example at `src/printer_device.rs`.
  
 ### Build and setup
-You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.40).
-You can easily install it on Fedora 31:
+You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.48).
+You can easily install it on Manjaro:
 ```shell script
-$ sudo dnf install rust cargo openssl # for building only
-$ sudo dnf install rust cargo openssl rust-src rust-doc \
+$ sudo pacman -S rust cargo openssl redis # for building only
+$ sudo pacman -S rust cargo openssl rust-src rust-doc \
   rust-debugger-common rust-lldb rust-gdb rustfmt rust-packaging # for developing
 ```
 

@@ -1,6 +1,6 @@
 [package]
 name = "webify"
-version = "0.2.1"
+version = "0.3.0-pre"
 authors = ["thomasfire <tomasfire@live.com>"]
 edition = "2018"
 
@@ -21,3 +21,6 @@ rust-crypto = "0.2.*"
 rand = "0.8.*"
 flate2 = "1.0"
 rustls = "0.18.1"
+redis = { version = "0.19.*", features = ["r2d2"] }
+r2d2_redis = { git = "https://github.com/thomasfire/r2d2-redis.git" }
+regex = "1.4.*"

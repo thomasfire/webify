@@ -19,6 +19,7 @@ use self::actix_web::http;
 use std::sync::Arc;
 use crate::file_device::FileDevice;
 use crate::printer_device::PrinterDevice;
+use crate::blog_device::BlogDevice;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -64,12 +65,18 @@ struct Dispatch {
     file_device: FileDevice,
     root_device: RootDev,
     printer_device: PrinterDevice,
+    blog_device: BlogDevice,
 }
 
 impl Dispatch {
-    pub fn new(conn: Pool) -> Dispatch {
+    pub fn new(conn: Pool, redis_cred: &str) -> Dispatch {
         let filer = FileDevice::new();
-        Dispatch { printer_device: PrinterDevice::new(Arc::new(filer.clone())), file_device: filer, root_device: RootDev::new(&conn) }
+        Dispatch {
+            printer_device: PrinterDevice::new(Arc::new(filer.clone())),
+            file_device: filer,
+            root_device: RootDev::new(&conn),
+            blog_device: BlogDevice::new(redis_cred)
+        }
     }
 
     pub fn resolve_by_name(&self, devname: &str) -> Result<&dyn Device, String> {
@@ -77,6 +84,7 @@ impl Dispatch {
             "filer" => Ok(&self.file_device),
             "root" => Ok(&self.root_device),
             "printer" => Ok(&self.printer_device),
+            "blogdev" => Ok(&self.printer_device),
             _ => Err("No such device".to_string())
         }
     }
@@ -93,7 +101,7 @@ pub struct DashBoard {
 
 
 impl DashBoard {
-    pub fn new(database_url: String) -> Result<DashBoard, String> {
+    pub fn new(database_url: String, redis_url: String) -> Result<DashBoard, String> {
         let conn: Pool = match get_connection(&database_url) {
             Ok(data) => data,
             Err(e) => {
@@ -114,7 +122,7 @@ impl DashBoard {
             mapped_devices: devices.clone(),
             database_url: database_url.clone(),
             connections: conn.clone(),
-            dispatcher: Dispatch::new(conn.clone()),
+            dispatcher: Dispatch::new(conn.clone(), &redis_url),
         };
         Ok(ds)
     }
@@ -384,50 +392,6 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::
         </body>
     </html>"#, info.as_str())))
 }
-/*
-/// Handles the multiparted file
-fn save_file(field: Field, username: String, path: String, mdata: DashBoard) -> impl Future<Item=(), Error=Error> {
-    let file_path_string = match field.content_disposition() {
-        Some(c_d) => match c_d.get_filename() {
-            Some(filename) => filename.replace(' ', "_").to_string(),
-            None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
-        },
-        None => return Either::A(err(error::ErrorBadRequest("No content-disposition")))
-    };
-    let full_path = format!("{}/{}", path, file_path_string);
-
-    Either::B(
-        field
-            .fold((0i64, mdata, username, full_path, path), move |(_acc, mut dash, username, full_path, directory), bytes| {
-                web::block(move || {
-                    dash.dispatcher.file_device.write_file(&username, &full_path, &bytes).map_err(|e| {
-                        println!("file.write_all failed: {}", e);
-                        MultipartError::Payload(error::PayloadError::Io(io::Error::new(io::ErrorKind::Other, e)))
-                    })?;
-                    Ok((0i64, dash, username, full_path, directory))
-                })
-                    .map_err(|e: error::BlockingError<MultipartError>| {
-                        match e {
-                            error::BlockingError::Error(e) => e,
-                            error::BlockingError::Canceled => MultipartError::Incomplete,
-                        }
-                    })
-            })
-            .map(|(_acc, mut dash, username, full_path, directory)| {
-                match dash.dispatcher.file_device.finish_file(&username, &full_path, &directory) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        eprintln!("Error on finishing the file: {}", e);
-                        ()
-                    }
-                }
-            })
-            .map_err(|e| {
-                println!("save_file failed, {:?}", e);
-                error::ErrorInternalServerError(e)
-            }),
-    )
-}*/
 
 /// Handles the upload requests
 pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<String>) -> Result<HttpResponse, Error> {

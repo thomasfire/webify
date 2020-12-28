@@ -14,6 +14,7 @@ use crate::printer_device::PrinterConfig;
 pub struct Config {
     pub db_config: String,
     pub bind_address: String,
+    pub redis_config: String
 }
 
 pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
@@ -59,6 +60,7 @@ pub fn read_config<T: Serialize + DeserializeOwned + Clone>(conf_path: &str) -> 
 /// let config = Config {
 ///     db_config: String::from("database.db"),
 ///     bind_address: String::from("127.0.0.1:2280"),
+///     redis_config: String::from("redis://127.0.0.1:6379/"),
 /// };
 /// write_database(config).unwrap();
 /// ```
@@ -85,6 +87,7 @@ pub fn write_config<T: Serialize + DeserializeOwned + Clone>(config: T, conf_pat
 pub fn setup() {
     let bind_address = io_tools::read_std_line("Enter address to bind on: ");
     let db_config = io_tools::read_std_line("Enter sqlite path: ");
+    let redis_config = io_tools::read_std_line("Enter redis URL (eg redis://127.0.0.1:6379/): ");
 
     println!("\nHere is your printers:\n{}\n", PrinterDevice::get_printers());
     let m_printer = io_tools::read_std_line("Enter name of the printer: ");
@@ -93,6 +96,7 @@ pub fn setup() {
     match write_config::<Config>(Config {
         db_config: db_config.clone(),
         bind_address: bind_address.clone(),
+        redis_config: redis_config.clone(),
     }, DEFAULT_CONFIG_PATH) {
         Ok(_) => println!("Ok"),
         Err(err) => panic!("{:?}", err),

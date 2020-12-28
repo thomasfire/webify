@@ -15,3 +15,5 @@ pub mod root_device;
 pub mod file_device;
 pub mod printer_device;
 pub mod file_cache;
+pub mod blog_device;
+pub mod news_payload_parser;
