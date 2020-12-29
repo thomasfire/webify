@@ -217,7 +217,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
     };
 
 
-    Ok(HttpResponse::Ok().body(format!("
+    Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(format!("
     <!DOCTYPE html>
     <html>
     <head>
@@ -274,7 +274,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
         return Ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
     }
 
-    Ok(HttpResponse::Ok().body(format!("
+    Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(format!("
     <!DOCTYPE html>
     <html>
     <head>

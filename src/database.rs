@@ -22,7 +22,7 @@ type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 
 /// Generates hash for the string. All password must go through this function
-fn get_hash(text: &str) -> String {
+pub fn get_hash(text: &str) -> String {
     let mut buff_str = text.to_string();
     for _x in 0..512 {
         let mut hasher = Sha256::new();

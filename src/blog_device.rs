@@ -4,11 +4,11 @@ extern crate r2d2_redis;
 use crate::dashboard::QCommand;
 use crate::device_trait::*;
 use crate::news_payload_parser::*;
-use redis::Commands;
+use crate::shikimori_scraper::run_parsing;
 
+use redis::Commands;
 use r2d2_redis::{RedisConnectionManager, r2d2};
 use std::ops::DerefMut;
-
 
 type RedisPool = r2d2::Pool<RedisConnectionManager>;
 
@@ -21,6 +21,7 @@ impl BlogDevice {
     pub fn new(db_config: &str) -> Self {
         let manager = RedisConnectionManager::new(db_config).unwrap(); // I am a Blade Runner
         let pool = RedisPool::builder().build(manager).unwrap();
+        run_parsing(pool.clone());
         BlogDevice { conn_pool: pool }
     }
 

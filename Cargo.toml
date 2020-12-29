@@ -1,6 +1,6 @@
 [package]
 name = "webify"
-version = "0.3.0-pre"
+version = "0.3.0-alpha"
 authors = ["thomasfire <tomasfire@live.com>"]
 edition = "2018"
 
@@ -24,3 +24,5 @@ rustls = "0.18.1"
 redis = { version = "0.19.*", features = ["r2d2"] }
 r2d2_redis = { git = "https://github.com/thomasfire/r2d2-redis.git" }
 regex = "1.4.*"
+scraper = "0.12.*"
+reqwest = { version = "0.10.*", features = ["blocking"] }
