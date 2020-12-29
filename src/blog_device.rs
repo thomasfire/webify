@@ -44,6 +44,35 @@ impl BlogDevice {
         Ok(format!("OK"))
     }
 
+    fn shownew_post(&self, username: &str, _payload: &str)-> Result<String, String> {
+        Ok(format!(r#"
+        <div class="postnewpost">
+                      <script>
+                        function send_post() {{
+                            let title_t = document.getElementById('payload_post_title');
+                            let bod_t = document.getElementById('payload_post_body');
+                            document.getElementById('payload_inpt').value = "<title>" + title_t.value + "</title><body>" + bod_t.value + "</body>";
+                            document.getElementById('post_sender').submit();
+                        }}
+                    </script>
+
+<textarea name="title" class="payload" id="payload_post_title" form="">Your title here...</textarea>
+<textarea name="body" class="payload" id="payload_post_body" form="">Your body here...</textarea>
+
+<form action="/dashboard/blogdev" method="post" id="post_sender">
+    <div class="command_f">
+        <input type="hidden" name="qtype" value="W" class="qtype">
+        <input type="hidden" name="group" value="blogdev_write" class="group">
+        <input type="hidden" name="username" value="{}" class="username">
+        <input type="hidden" name="command" value="createpost" class="command">
+        <input type="hidden" name="payload" class="payload" id="payload_inpt">
+    </div>
+    <a onclick="send_post();" class="post_sender">Send Post</a>
+</form>
+</div>
+        "#, username))
+    }
+
     fn get_post(&self, username: &str, payload: &str) -> Result<String, String> {
         let post_id: u32 = payload.parse().map_err(|err| { format!("Couldn't parse the argument: {:?}", err) })?;
         let mut curr_conn = match self.conn_pool.get() {
@@ -53,7 +82,7 @@ impl BlogDevice {
         let title: String = curr_conn.deref_mut().get(&format!("title_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
         let body: String = curr_conn.deref_mut().get(&format!("body_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
         let cmmcount: u32 = curr_conn.deref_mut().get(&format!("cmmcount_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        let cmms: Vec<String> = curr_conn.deref_mut().get(&format!("cmms_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let cmms: Vec<String> = curr_conn.deref_mut().lrange(&format!("cmms_{}", post_id), 0, cmmcount as isize).map_err(|err| { format!("Redis err: {:?}", err) })?;
         let cmms_block = format!(r#"<div class="cmmblock">
             <div class="cmmcounter">{}</div>
             {}
@@ -66,12 +95,12 @@ impl BlogDevice {
                       <script>
                         function send_cmm() {{
                             let cmm_t = document.getElementById('payload_cmm_new');
-                            cmm_t.value = "<id>{}</id><text>" + cmm_t.value + "</text>";
+                            document.getElementById('payload_inpt').value = "<id>{}</id><text>" + cmm_t.value + "</text>";
                             document.getElementById('cmm_sender').submit();
                         }}
                     </script>
 
-<textarea name="payload" class="payload" id="payload_cmm_new" form="cmm_sender">Your comment here...</textarea>
+<textarea name="payload_t" class="payload_t" id="payload_cmm_new" form="">Your comment here...</textarea>
 
 <form action="/dashboard/blogdev" method="post" id="cmm_sender">
     <div class="command_f">
@@ -79,10 +108,11 @@ impl BlogDevice {
         <input type="hidden" name="group" value="blogdev_request" class="group">
         <input type="hidden" name="username" value="{}" class="username">
         <input type="hidden" name="command" value="createcmm" class="command">
-
+        <input type="hidden" name="payload" class="payload" id="payload_inpt">
     </div>
-    <a href="\#" onclick="send_cmm();" class="cmmsender">Send Comment</a>
+    <a onclick="send_cmm();" class="cmmsender">Send Comment</a>
 </form>
+</div>
                       "#, title, body, cmms_block, post_id, username))
     }
 
@@ -107,7 +137,7 @@ impl BlogDevice {
             Err(err) => return Err(format!("Error on getting current redis conn: {:?}", err))
         };
 
-        let last_id: u32 = curr_conn.deref_mut().get(last_key).map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let last_id: u32 = curr_conn.deref_mut().get(last_key).unwrap_or(0) + 1;
         let mut buffer_v: Vec<String> = vec![];
         buffer_v.reserve(last_id as usize);
         for x in 0..last_id {
@@ -124,14 +154,27 @@ impl BlogDevice {
                                               <input type="hidden" name="command" value="getpost" class="command">
                                               <input type="hidden" name="payload" value="{}" class="payload">
                                             </div>
-                                              <a href=" #" onclick="document.getElementById('postpage_sender{}').submit();">{}</a>
+                                              <a onclick="document.getElementById('postpage_sender{}').submit();">{}</a>
                                         </form>
                             </div>"#, x, username, x, x, title));
         }
         Ok(format!(r#"<div class="post_list_block">
             <div class="posts_list_counter">{}</div>
             {}
-        </div>"#, buffer_v.len(), buffer_v.join("\n")))
+        </div>
+        <div class="ln_create_post">
+        <form action="/dashboard/blogdev"  method="post" id="postpage_sender">
+                <div class="command_f">
+                  <input type="hidden" name="qtype" value="W" class="qtype">
+                  <input type="hidden" name="group" value="blogdev_write" class="group">
+                  <input type="hidden" name="username" value="{}" class="username">
+                  <input type="hidden" name="command" value="showcreatepost" class="command">
+                  <input type="hidden" name="payload" value="" class="payload">
+                </div>
+                  <a onclick="document.getElementById('postpage_sender').submit();">Create a post</a>
+            </form>
+        </div>
+        "#, buffer_v.len(), buffer_v.join("\n"), &username))
     }
 }
 
@@ -169,6 +212,7 @@ impl DeviceWrite for BlogDevice {
 
         match command {
             "createpost" => self.new_post(&query.username, &query.payload),
+            "showcreatepost" => self.shownew_post(&query.username, &query.payload),
             _ => return Err(format!("Unknown for BlogDevice.read command: {}", command))
         }
     }

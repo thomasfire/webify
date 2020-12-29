@@ -84,7 +84,7 @@ impl Dispatch {
             "filer" => Ok(&self.file_device),
             "root" => Ok(&self.root_device),
             "printer" => Ok(&self.printer_device),
-            "blogdev" => Ok(&self.printer_device),
+            "blogdev" => Ok(&self.blog_device),
             _ => Err("No such device".to_string())
         }
     }

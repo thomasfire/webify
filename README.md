@@ -35,7 +35,7 @@ $ ./build.sh build  # for debug version
 $ ./build.sh build --release  # for release version
 ```
 
-After this you can copy the `target/[release, debug]/styles` and `target/[release, debug]/webify`
+After this you can copy the `target/[release, debug]/static` and `target/[release, debug]/webify`
 to place you want. Go to that place and run:
 ```shell script
 $ ./webify --setup  # configure the database, address and printer
@@ -43,6 +43,9 @@ $ ./webify --uadd   # add your first user, remember that it must contain all the
 $ openssl genrsa 4096 > key.pem  # generate key for TLS
 $ openssl req -x509 -days 1000 -new -key key.pem -out cert.pem  # generate certificate for TLS
 ```
+
+Suggested groups for your first user: `rstatus,filer_read,filer_write,root_write,root_read,printer_read,printer_write,printer_request,printer_confirm,blogdev_write,blogdev_request,blogdev_read`.
+Suggested groups for your basic users: `rstatus,filer_read,printer_read,printer_request,blogdev_request,blogdev_read`.
 
 After this you can just run the server:
 ```shell script

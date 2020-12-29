@@ -24,12 +24,18 @@ pub fn parse_post(payload: &str) -> Result<NewsPostParsed, String> {
         Err(err) => return Err(format!("Error on creating body regexp: {}", err))
     };
 
-    let title_s = match title_reg.find(payload) {
-        Some(val) => val.as_str().to_string(),
+    let title_s = match title_reg.captures(payload) {
+        Some(val) => match val.get(1) {
+            Some(vaw) => vaw.as_str().to_string(),
+            None => return Err(format!("Invalid title"))
+        },
         None => return Err(format!("Invalid title"))
     };
-    let body_s = match body_reg.find(payload) {
-        Some(val) => val.as_str().to_string(),
+    let body_s = match body_reg.captures(payload) {
+        Some(val) => match val.get(1) {
+            Some(vaw) => vaw.as_str().to_string(),
+            None => return Err(format!("Invalid body"))
+        },
         None => return Err(format!("Invalid body"))
     };
 
@@ -47,13 +53,19 @@ pub fn parse_cmm(payload: &str) -> Result<NewsCmmParsed, String> {
         Err(err) => return Err(format!("Error on creating body regexp: {}", err))
     };
 
-    let id_s = match id_reg.find(payload) {
-        Some(val) => val.as_str().parse::<u32>().map_err(|err| { format!("Error on parsing cmm, no id: {:?}", err) })?,
-        None => return Err(format!("Invalid title"))
+    let id_s = match id_reg.captures(payload) {
+        Some(val) => match val.get(1) {
+            Some(vaw) => vaw.as_str().to_string(),
+            None => return Err(format!("Invalid id"))
+        }.parse::<u32>().map_err(|err| { format!("Error on parsing cmm, no id: {:?}", err) })?,
+        None => return Err(format!("Invalid id"))
     };
-    let text_s = match text_reg.find(payload) {
-        Some(val) => val.as_str().to_string(),
-        None => return Err(format!("Invalid body"))
+    let text_s = match text_reg.captures(payload) {
+        Some(val) => match val.get(1) {
+            Some(vaw) => vaw.as_str().to_string(),
+            None => return Err(format!("Invalid text"))
+        },
+        None => return Err(format!("Invalid text"))
     };
 
     Ok(NewsCmmParsed { post_id: id_s, text: text_s, date: format!("{}", Utc::now()) })
