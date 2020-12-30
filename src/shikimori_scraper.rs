@@ -64,7 +64,19 @@ fn parse_and_write(curr_conn: &mut PooledConnection<RedisConnectionManager>, lnu
 
     let articles = document.select(&selector_article)
         .map(|elem| { elem.inner_html() }).collect::<Vec<String>>();
-    let article = articles.get(0).unwrap_or(&("".to_string())).clone();
+    let mut article = articles.get(0).unwrap_or(&("".to_string())).clone();
+
+    let inner_links_selector = Selector::parse("a.b-link")
+        .map_err(|err| { format!("Failed to create select for header: {:?}", err) })?;
+    let parsed_inner = Html::parse_fragment(&article);
+    let links = parsed_inner.select(&inner_links_selector)
+        .map(|elem| { elem.value().attr("href").unwrap_or("").to_string() }).collect::<Vec<String>>();
+
+    for link in &links {
+        if link.chars().next() == Some('/') {
+            article = article.replace(link, &format!("https://shikimori.one{}", link));
+        }
+    }
 
     let last_key = "ilast_post";
 

@@ -38,14 +38,18 @@ impl BlogDevice {
 
         let last_id: u32 = curr_conn.deref_mut().get(last_key).unwrap_or(0);
         let curr_id = last_id + 1;
-        curr_conn.deref_mut().set(&format!("title_{}", curr_id), post.title).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        curr_conn.deref_mut().set(&format!("body_{}", curr_id), post.body).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        curr_conn.deref_mut().set(&format!("cmmcount_{}", curr_id), 0).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        curr_conn.deref_mut().set("ilast_post", curr_id).map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().set(&format!("title_{}", curr_id), post.title)
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().set(&format!("body_{}", curr_id), post.body)
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().set(&format!("cmmcount_{}", curr_id), 0)
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().set("ilast_post", curr_id).
+            map_err(|err| { format!("Redis err: {:?}", err) })?;
         Ok(format!("OK"))
     }
 
-    fn shownew_post(&self, username: &str, _payload: &str)-> Result<String, String> {
+    fn shownew_post(&self, username: &str, _payload: &str) -> Result<String, String> {
         Ok(format!(r#"
         <div class="postnewpost">
                       <script>
@@ -80,10 +84,14 @@ impl BlogDevice {
             Ok(val) => val,
             Err(err) => return Err(format!("Error on getting current redis conn: {:?}", err))
         };
-        let title: String = curr_conn.deref_mut().get(&format!("title_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        let body: String = curr_conn.deref_mut().get(&format!("body_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        let cmmcount: u32 = curr_conn.deref_mut().get(&format!("cmmcount_{}", post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        let cmms: Vec<String> = curr_conn.deref_mut().lrange(&format!("cmms_{}", post_id), 0, cmmcount as isize).map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let title: String = curr_conn.deref_mut().get(&format!("title_{}", post_id))
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let body: String = curr_conn.deref_mut().get(&format!("body_{}", post_id))
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let cmmcount: u32 = curr_conn.deref_mut().get(&format!("cmmcount_{}", post_id))
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let cmms: Vec<String> = curr_conn.deref_mut().lrange(&format!("cmms_{}", post_id), 0, cmmcount as isize)
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
         let cmms_block = format!(r#"<div class="cmmblock">
             <div class="cmmcounter">{}</div>
             {}
@@ -123,9 +131,13 @@ impl BlogDevice {
             Ok(val) => val,
             Err(err) => return Err(format!("Error on getting current redis conn: {:?}", err))
         };
-        let cmmcount: u32 = curr_conn.deref_mut().get(&format!("cmmcount_{}", cmm_parsed.post_id)).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        curr_conn.deref_mut().set(&format!("cmmcount_{}", cmm_parsed.post_id), cmmcount + 1).map_err(|err| { format!("Redis err: {:?}", err) })?;
-        curr_conn.deref_mut().rpush(&format!("cmms_{}", cmm_parsed.post_id), format!(r#"<div class="cmmauth">{}</div><div class="cmmtime">{}</div><div class="cmmtext">{}</div>"#, username, cmm_parsed.date, cmm_parsed.text)).map_err(|err| { format!("Redis err: {:?}", err) })?;
+        let cmmcount: u32 = curr_conn.deref_mut().get(&format!("cmmcount_{}", cmm_parsed.post_id))
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().set(&format!("cmmcount_{}", cmm_parsed.post_id), cmmcount + 1)
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().rpush(&format!("cmms_{}", cmm_parsed.post_id),
+                                    format!(r#"<div class="cmmauth">{}</div><div class="cmmtime">{}</div><div class="cmmtext">{}</div>"#,
+                                            username, cmm_parsed.date, cmm_parsed.text)).map_err(|err| { format!("Redis err: {:?}", err) })?;
 
         Ok("OK".to_string())
     }
