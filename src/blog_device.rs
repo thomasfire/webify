@@ -18,10 +18,12 @@ pub struct BlogDevice {
 }
 
 impl BlogDevice {
-    pub fn new(db_config: &str) -> Self {
+    pub fn new(db_config: &str, use_scraper: bool) -> Self {
         let manager = RedisConnectionManager::new(db_config).unwrap(); // I am a Blade Runner
         let pool = RedisPool::builder().build(manager).unwrap();
-        run_parsing(pool.clone());
+        if use_scraper {
+            run_parsing(pool.clone());
+        }
         BlogDevice { conn_pool: pool }
     }
 

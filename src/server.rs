@@ -165,7 +165,7 @@ async fn main_page() -> Result<HttpResponse, Error> {
 #[actix_rt::main]
 pub async fn run_server(a_config: Arc<Mutex<Config>>) {
     let config: Config = { a_config.lock().unwrap().clone() };
-    let ds = match DashBoard::new(config.db_config, config.redis_config) {
+    let ds = match DashBoard::new(&config) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error on starting the server (make dashboard): {:?}", e);

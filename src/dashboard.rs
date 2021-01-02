@@ -20,6 +20,7 @@ use std::sync::Arc;
 use crate::file_device::FileDevice;
 use crate::printer_device::PrinterDevice;
 use crate::blog_device::BlogDevice;
+use crate::config::Config;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -69,13 +70,13 @@ struct Dispatch {
 }
 
 impl Dispatch {
-    pub fn new(conn: Pool, redis_cred: &str) -> Dispatch {
+    pub fn new(conn: Pool, redis_cred: &str, use_scraper: bool) -> Dispatch {
         let filer = FileDevice::new();
         Dispatch {
             printer_device: PrinterDevice::new(Arc::new(filer.clone())),
             file_device: filer,
             root_device: RootDev::new(&conn),
-            blog_device: BlogDevice::new(redis_cred)
+            blog_device: BlogDevice::new(redis_cred, use_scraper),
         }
     }
 
@@ -101,8 +102,8 @@ pub struct DashBoard {
 
 
 impl DashBoard {
-    pub fn new(database_url: String, redis_url: String) -> Result<DashBoard, String> {
-        let conn: Pool = match get_connection(&database_url) {
+    pub fn new(config: &Config) -> Result<DashBoard, String> {
+        let conn: Pool = match get_connection(&config.db_config) {
             Ok(data) => data,
             Err(e) => {
                 eprintln!("Error in DashBoard::new at getting the connection: {:?}", e);
@@ -120,9 +121,9 @@ impl DashBoard {
 
         let ds: DashBoard = DashBoard {
             mapped_devices: devices.clone(),
-            database_url: database_url.clone(),
+            database_url: config.db_config.clone(),
             connections: conn.clone(),
-            dispatcher: Dispatch::new(conn.clone(), &redis_url),
+            dispatcher: Dispatch::new(conn.clone(), &config.redis_config, config.use_scraper),
         };
         Ok(ds)
     }
@@ -251,7 +252,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
     </body>
     </html>
     ", get_available_devices(&mdata.connections, &mdata.mapped_devices, &user)
-                                       , get_available_info(&mdata, &user, info.as_str()))))
+                                                                                , get_available_info(&mdata, &user, info.as_str()))))
 }
 
 /// Handles the QCommand requests
@@ -308,7 +309,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
     </body>
     </html>
     ", get_available_devices(&mdata.connections, &mdata.mapped_devices, &user)
-                                       , match mdata.dispatch(&user, info.as_str(), form.0) {
+                                                                                , match mdata.dispatch(&user, info.as_str(), form.0) {
             Ok(d) => d,
             Err(e) => e
         })))
