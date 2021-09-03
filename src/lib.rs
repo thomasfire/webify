@@ -18,3 +18,4 @@ pub mod file_cache;
 pub mod blog_device;
 pub mod news_payload_parser;
 pub mod shikimori_scraper;
+pub mod template_cache;

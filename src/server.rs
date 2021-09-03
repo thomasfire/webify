@@ -18,8 +18,8 @@ use crate::database::{validate_user, get_random_token, assign_cookie, remove_coo
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
 
-async fn get_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
-    let static_str = match mdata.get_ref().clone().get_str_file(&info.0) {
+fn get_static_file(info: &str, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    let static_str = match mdata.get_ref().clone().get_str_file(info) {
         Ok(res) => res,
         Err(err) => {
             eprintln!("Error on reading static file: {}", err);
@@ -28,6 +28,10 @@ async fn get_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -
     };
 
     Ok(HttpResponse::Ok().body(format!("{}", static_str)))
+}
+
+async fn responce_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    get_static_file(&info.0, mdata)
 }
 
 /// Info, used in the auth form when logging in
@@ -39,7 +43,7 @@ struct LoginInfo {
 
 
 /// Handles login requests when LoginInfo has been already sent
-async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
+async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>, f_cache: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     println!("login_handler: {:?}", id.identity());
 
     let nick = form.username.clone();
@@ -67,23 +71,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
         }
     };
 
-    Ok(HttpResponse::Ok().body(format!("
-    <!DOCTYPE html>
-    <html>
-    <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/lite.css\" media=\"screen\" />
-    <head>
-        <title>Webify Main</title>
-    </head>
-    <body>
-    <script type=\"text/JavaScript\">
-      setTimeout(\"location.href='/dashboard/filer';\", 1500);
-    </script>
-    <p class=\"info\">
-        Logged in. Redirecting in seconds, if this doesn't help, click here: <a href=\"/dashboard\">Go to Dashboard</a>
-    </p>
-    </body>
-    </html>
-    ")))
+    get_static_file("login_success.html", f_cache)
 }
 
 async fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
@@ -105,47 +93,13 @@ async fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> Result<Htt
 }
 
 /// Returns standard login page with form for signing in
-async fn login_page(_id: Identity) -> Result<HttpResponse, Error> {
-    Ok(HttpResponse::Ok().body(format!("\
-    <!DOCTYPE html>
-    <html>
-    <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/styles.css\" media=\"screen\" />
-    <head>
-        <title>Webify Main</title>
-    </head>
-    <body>
-    <div class=\"login_form\">
-        <form action=\"/get_logged_in\"  method=\"post\" >
-            <div class=\"text_field\">
-               Username:<br>
-              <input type=\"text\" name=\"username\" value=\"Weber\" class=\"username\">
-              <br>
-              Password:<br>
-              <input type=\"password\" name=\"password\" value=\"123\" class=\"password\">
-              <br><br>
-            </div>
-              <input type=\"submit\" value=\"Log In\" class=\"button\">
-        </form>
-    </div>
-    </body>
-    </html>")))
+async fn login_page(_id: Identity, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    get_static_file("login.html", mdata)
 }
 
 /// Returns basic main page (currently there is only one button)
-async fn main_page() -> Result<HttpResponse, Error> {
-    Ok(HttpResponse::Ok().body(format!("
-    <!DOCTYPE html>
-    <html>
-    <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/styles.css\" media=\"screen\" />
-    <head>
-        <title>Webify Main</title>
-    </head>
-    <body>
-    <div class=\"login_btn\">
-        <a href=\"/login\">Log In</a>
-    </div>
-    </body>
-    </html>")))
+async fn main_page(mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    get_static_file("main.html", mdata)
 }
 
 /// Runs all initial functions and starts the server.
@@ -204,7 +158,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
                 .route(web::post().to(dashboard_page_req))
                 .route(web::get().to(dashboard_page)))
             .service(web::resource("/dashboard/{device}").to(dashboard_page))
-            .service(web::resource("/static/{path}").to(get_static_file))
+            .service(web::resource("/static/{path}").to(responce_static_file))
             .service(web::resource("/download/{path}").to(file_sender))
             .service(
                 web::resource("/upload/{path}")
