@@ -1,5 +1,4 @@
-use crate::file_cache::FileCache;
-use handlebars::{Handlebars, Context};
+use handlebars::Handlebars;
 use serde::Serialize;
 
 
@@ -17,7 +16,7 @@ impl TemplateCache<'_> {
         TemplateCache { templater: Arc::new(RwLock::new(Handlebars::new())) }
     }
 
-    pub fn load(&mut self, path_to_add: &str) -> Result<(), String> {
+    pub fn load(&self, path_to_add: &str) -> Result<(), String> {
         let entries = read_dir(path_to_add).map_err(|err| { format!("Error on reading templates directory {}: {:?}", path_to_add, err) })?;
         let mut err_counter: u16 = 0;
         {
@@ -49,10 +48,13 @@ impl TemplateCache<'_> {
                     }
                 };
                 let name = entry_path.file_name().to_string_lossy().to_string();
-                handler.register_template_string(&name, str_buf).map_err(|err| {
+                match handler.register_template_string(&name, str_buf).map_err(|err| {
                     eprintln!("Error in registering the template {}: {:?}", name, err);
                     err_counter += 1;
-                });
+                }) {
+                    Ok(_) => continue,
+                    Err(_) => continue,
+                };
             }
         }
         if err_counter > 0 {
@@ -62,8 +64,8 @@ impl TemplateCache<'_> {
         }
     }
 
-    pub fn render_template<T>(&self, tmpl: &str, data: &Context) -> Result<String, String> {
-        self.templater.read().unwrap().render_with_context(tmpl, data).map_err(|err| {
+    pub fn render_template<T>(&self, tmpl: &str, data: &T) -> Result<String, String> where T: Serialize{
+        self.templater.read().unwrap().render(tmpl, data).map_err(|err| {
             format!("Error in rendering {}: {:?}", tmpl, err)
         })
     }

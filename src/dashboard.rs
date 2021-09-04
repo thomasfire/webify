@@ -2,7 +2,7 @@ extern crate actix_identity;
 extern crate actix_web;
 extern crate actix_form_data;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 
 use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error};
@@ -21,6 +21,7 @@ use crate::file_device::FileDevice;
 use crate::printer_device::PrinterDevice;
 use crate::blog_device::BlogDevice;
 use crate::config::Config;
+use crate::template_cache::TemplateCache;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -93,16 +94,17 @@ impl Dispatch {
 
 /// Stores all needed data and dispatcher, and handles all the requests to the devices.
 #[derive(Clone)]
-pub struct DashBoard {
+pub struct DashBoard<'a> {
     pub mapped_devices: HashMap<String, String>,
     pub database_url: String,
     pub connections: Pool,
+    pub templater: TemplateCache<'a>,
     dispatcher: Dispatch,
 }
 
 
-impl DashBoard {
-    pub fn new(config: &Config) -> Result<DashBoard, String> {
+impl DashBoard<'_> {
+    pub fn new<'a, 'b>(config: &'a Config) -> Result<DashBoard<'b>, String> {
         let conn: Pool = match get_connection(&config.db_config) {
             Ok(data) => data,
             Err(e) => {
@@ -124,8 +126,14 @@ impl DashBoard {
             database_url: config.db_config.clone(),
             connections: conn.clone(),
             dispatcher: Dispatch::new(conn.clone(), &config.redis_config, config.use_scraper),
+            templater: TemplateCache::new(),
         };
+        ds.reload().unwrap();
         Ok(ds)
+    }
+
+    pub fn reload(&self) -> Result<(), String> {
+        self.templater.load("templates")
     }
 
     /// Makes some validity checks and dispatches the command to the device's needed function
@@ -193,7 +201,7 @@ fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, 
         .collect::<Vec<String>>().join("\n"))
 }
 
-fn get_available_info(dasher: &DashBoard, username: &str, device: &str) -> String {
+fn get_available_info(dasher: &DashBoard<'_>, username: &str, device: &str) -> String {
     let query = QCommand { qtype: "S".to_string(), group: "rstatus".to_string(), username: username.to_string(), command: "".to_string(), payload: "".to_string() };
 
     match dasher.dispatch(username, device, query) {
@@ -202,8 +210,18 @@ fn get_available_info(dasher: &DashBoard, username: &str, device: &str) -> Strin
     }
 }
 
+pub async fn dashboard_reload_templates(mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
+    match mdata.reload() {
+        Ok(_) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("Reloaded")),
+        Err(err) => {
+            eprintln!("Error on reload: {}", err);
+            Ok(HttpResponse::InternalServerError().content_type("text/html; charset=utf-8").body("Error occurred during reload. See logs for details"))
+        }
+    }
+}
+
 /// Handles empty request to the dashboard
-pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
+pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -257,7 +275,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
 
 /// Handles the QCommand requests
 pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
-                                form: web::Form<QCommand>, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
+                                form: web::Form<QCommand>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -316,7 +334,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
 }
 
 /// Sends needed file to the user after security checks
-pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
+pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
     println!("File transfer");
     let cookie = match id.identity() {
         Some(data) => data,
@@ -354,7 +372,7 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
 }
 
 /// Page for uploading the file
-pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::Path<String>) -> Result<HttpResponse, Error> {
+pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: web::Path<String>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -379,23 +397,19 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard>, info: web::
     if !gaccess {
         return Ok(HttpResponse::Forbidden().body("You are not allowed to upload files"));
     }
-
-    Ok(HttpResponse::Ok().body(format!(r#"<html>
-        <head><title>Upload to Filer</title></head>
-        <link rel="stylesheet" type="text/css" href="/static/lite.css" media="screen" />
-        <body>
-            <div class="uploader">
-                <form target="/{}" method="post" enctype="multipart/form-data">
-                    <input type="file" name="file"/>
-                    <input type="submit" value="Submit">
-                </form>
-            </div>
-        </body>
-    </html>"#, info.as_str())))
+    let mut context_data: BTreeMap<String, String> = BTreeMap::new();
+    context_data.insert("target".to_string(), info.to_string());
+    match mdata.templater.render_template("upload.html", &context_data) {
+        Ok(data) => Ok(HttpResponse::Ok().body(data)),
+        Err(err) => {
+            eprintln!("Error in rendering the page: {}", err);
+            Ok(HttpResponse::InternalServerError().body("Page render error. Contact your administrator"))
+        }
+    }
 }
 
 /// Handles the upload requests
-pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<DashBoard>, info: web::Path<String>) -> Result<HttpResponse, Error> {
+pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<DashBoard<'_>>, info: web::Path<String>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return Err(error::ErrorUnauthorized("Unauthorized")),
@@ -430,7 +444,7 @@ pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<D
         let file_path_string = match field.content_disposition() {
             Some(c_d) => match c_d.get_filename() {
                 Some(filename) => filename.replace(' ', "_").to_string(),
-                None => return Err(error::ErrorBadRequest("No content-disposition"))
+                None => return Err(error::ErrorBadRequest("No filename in content-disposition"))
             },
             None => return Err(error::ErrorBadRequest("No content-disposition"))
         };

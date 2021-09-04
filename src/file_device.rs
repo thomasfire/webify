@@ -11,7 +11,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 struct BufferedFile {
-    pub path: String,
+    //pub path: String,
     pub data: Vec<u8>,
 }
 
@@ -81,7 +81,7 @@ impl FileDevice {
                     }
                     None => {
                         println!("Initial Adding bytes: {}", data.len());
-                        x.insert(filepath.clone(), BufferedFile { path: filepath.clone(), data: data.to_vec() });
+                        x.insert(filepath.clone(), BufferedFile { data: data.to_vec() });
                         println!("Wrote...");
                         return ();
                     }

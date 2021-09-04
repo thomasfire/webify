@@ -13,7 +13,7 @@ use crate::config::Config;
 use crate::file_cache::FileCache;
 
 use self::actix_web::{Error, http};
-use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader};
+use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader, dashboard_reload_templates};
 use crate::database::{validate_user, get_random_token, assign_cookie, remove_cookie};
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
@@ -43,7 +43,7 @@ struct LoginInfo {
 
 
 /// Handles login requests when LoginInfo has been already sent
-async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard>, f_cache: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard<'_>>, f_cache: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     println!("login_handler: {:?}", id.identity());
 
     let nick = form.username.clone();
@@ -74,7 +74,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     get_static_file("login_success.html", f_cache)
 }
 
-async fn logout_handler(id: Identity, mdata: web::Data<DashBoard>) -> Result<HttpResponse, Error> {
+async fn logout_handler(id: Identity, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
     let cookie = match id.identity() {
         Some(data) => data,
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -152,6 +152,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
             .service(web::resource("/main").to(main_page))
             .service(web::resource("/").to(main_page))
             .service(web::resource("/login").to(login_page))
+            .service(web::resource("/reload").to(dashboard_reload_templates))
             .service(web::resource("/logout").to(logout_handler))
             .service(web::resource("/get_logged_in").route(web::post().to(login_handler)))
             .service(web::resource("/dashboard/{device}")
