@@ -1,0 +1,43 @@
+{{#if subpage.msg_only}}
+    {{subpage.message}}
+{{else if subpage.istable}}
+    <table class="reqtable">
+        <tr>
+            <th>id</th>
+            <th>username</th>
+            <th>payload</th>
+        </tr>
+        {{#each subpage.entries as |entry|}}
+            <tr>
+                <td>{entry.id}</td>
+                <td>{entry.username}</td>
+                <td>{entry.payload}</td>
+            </tr>
+        {{/each}}
+    </table>
+{{else}}
+    <div class="command_form">
+        <form action="/dashboard/printer"  method="post" >
+            <div class="command_f">
+                QType:<br>
+                <input type="text" name="qtype" value="Q" class="qtype">
+                <br>
+                Group:<br>
+                <input type="text" name="group" value="printer_request" class="group">
+                <input type="hidden" name="username" value="{{subpage.username}}" class="username">
+                <br>
+                Command:<br>
+                <input type="text" name="command" value="print_file" class="command">
+                <br>
+                <br>
+                Payload:<br>
+                <input type="text" name="payload" value="" class="payload">
+                <br><br>
+            </div>
+            <input type="submit" value="Send" class="button">
+        </form>
+    </div><br>
+    <div class="printer_info">
+        {{subpage.message}}
+    </div>
+{{/if}}

@@ -2,26 +2,25 @@ extern crate actix_identity;
 extern crate actix_web;
 extern crate actix_form_data;
 
-use std::collections::{HashMap, BTreeMap};
-
-use actix_identity::Identity;
-use actix_web::{Error, HttpResponse, web, error};
-use diesel::r2d2::{self, ConnectionManager};
-use diesel::SqliteConnection;
-use futures::StreamExt;
-
-use actix_multipart::Multipart;
-
 use crate::database::{get_connection, get_user_devices, get_user_from_cookie, on_init, has_access_to_device, has_access_to_group};
 use crate::root_device::RootDev;
 use crate::device_trait::*;
-use self::actix_web::http;
-use std::sync::Arc;
 use crate::file_device::FileDevice;
 use crate::printer_device::PrinterDevice;
 use crate::blog_device::BlogDevice;
 use crate::config::Config;
 use crate::template_cache::TemplateCache;
+
+use actix_identity::Identity;
+use actix_web::{Error, HttpResponse, web, error, http};
+use diesel::r2d2::{self, ConnectionManager};
+use diesel::SqliteConnection;
+use futures::StreamExt;
+use serde_json::Value as jsVal;
+use actix_multipart::Multipart;
+
+use std::sync::Arc;
+use std::collections::{HashMap, BTreeMap};
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -137,7 +136,7 @@ impl DashBoard<'_> {
     }
 
     /// Makes some validity checks and dispatches the command to the device's needed function
-    pub fn dispatch(&self, username: &str, device: &str, query: QCommand) -> Result<String, String> {
+    pub fn dispatch(&self, username: &str, device: &str, query: QCommand) -> Result<jsVal, String> {
         if username != query.username {
             return Err(format!("Wrong command credentials"));
         }
@@ -185,28 +184,28 @@ impl DashBoard<'_> {
 }
 
 
-fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, username: &str) -> String {
-    let devices: Vec<String> = match get_user_devices(pool, mapped_devices, username) {
+fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, username: &str) -> Vec<String> {
+    match get_user_devices(pool, mapped_devices, username) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in get_available_devices: {:?}", e);
-            return "Error on loading".to_string();
+            Vec::new()
         }
-    };
-
-    format!("<ul class=\"devlist\">
-            {}
-    </ul>", devices.iter()
-        .map(|x| format!("<li class=\"devitem\"><a href=\"{}\">{}</a></li>", x, x))
-        .collect::<Vec<String>>().join("\n"))
+    }
 }
 
-fn get_available_info(dasher: &DashBoard<'_>, username: &str, device: &str) -> String {
-    let query = QCommand { qtype: "S".to_string(), group: "rstatus".to_string(), username: username.to_string(), command: "".to_string(), payload: "".to_string() };
+fn get_available_info(dasher: &DashBoard<'_>, username: &str, device: &str) -> jsVal {
+    let query = QCommand {
+        qtype: "S".to_string(),
+        group: "rstatus".to_string(),
+        username: username.to_string(),
+        command: "".to_string(),
+        payload: "".to_string(),
+    };
 
     match dasher.dispatch(username, device, query) {
         Ok(d) => d,
-        Err(e) => format!("Error on getting the available info: {}", e)
+        Err(e) => json!({"err": format!("Error on getting the available info: {}", e)})
     }
 }
 
@@ -215,7 +214,9 @@ pub async fn dashboard_reload_templates(mdata: web::Data<DashBoard<'_>>) -> Resu
         Ok(_) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("Reloaded")),
         Err(err) => {
             eprintln!("Error on reload: {}", err);
-            Ok(HttpResponse::InternalServerError().content_type("text/html; charset=utf-8").body("Error occurred during reload. See logs for details"))
+            Ok(HttpResponse::InternalServerError()
+                .content_type("text/html; charset=utf-8")
+                .body("Error occurred during reload. See logs for details"))
         }
     }
 }
@@ -234,43 +235,19 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
-
-
-    Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(format!("
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Webify Dashboard</title>
-        <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/dashboard.css\" media=\"screen\" />
-    </head>
-    <body>
-
-        <div class=\"dashboard\">
-        <h2>Dashboard</h2>
-            <div class=\"devices\">
-                <div class=\"devrow\">
-                    <div class=\"devcell\">
-                        Available devices: <br>
-                        {}
-                    </div>
-                </div>
-                <div class=\"logout\">
-                    <a href=\"../logout\">Log out</a>
-                </div>
-            </div>
-            <div class=\"info\">
-                <div class=\"inforow\">
-                    <div class=\"infocell\">
-                        Info: <br>
-                        {}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ", get_available_devices(&mdata.connections, &mdata.mapped_devices, &user)
-                                                                                , get_available_info(&mdata, &user, info.as_str()))))
+    match mdata.templater.render_template("dashboard.html",
+                                          &json!({
+                                              "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
+                                              "subpage": get_available_info(&mdata, &user, info.as_str())
+                                            })) {
+        Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
+        Err(err) => {
+            eprintln!("Error in rendering dashboard: {}", err);
+            Ok(HttpResponse::InternalServerError()
+                .content_type("text/html; charset=utf-8")
+                .body("Error on rendering the page. Contact your administrator."))
+        }
+    }
 }
 
 /// Handles the QCommand requests
@@ -293,44 +270,22 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
         return Ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
     }
 
-    Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(format!("
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>Webify Dashboard</title>
-        <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/dashboard.css\" media=\"screen\" />
-    </head>
-    <body>
-
-        <div class=\"dashboard\">
-        <h2>Dashboard</h2>
-            <div class=\"devices\">
-                <div class=\"devrow\">
-                    <div class=\"devcell\">
-                        Available devices: <br>
-                        {}
-                    </div>
-                </div>
-                <div class=\"logout\">
-                    <a href=\"../logout\">Log out</a>
-                </div>
-            </div>
-            <div class=\"info\">
-                <div class=\"inforow\">
-                    <div class=\"infocell\">
-                        Info: <br>
-                        {}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </body>
-    </html>
-    ", get_available_devices(&mdata.connections, &mdata.mapped_devices, &user)
-                                                                                , match mdata.dispatch(&user, info.as_str(), form.0) {
+    match mdata.templater.render_template("dashboard.html",
+                                          &json!({
+                                              "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
+                                              "subpage": match mdata.dispatch(&user, info.as_str(), form.0) {
             Ok(d) => d,
-            Err(e) => e
-        })))
+            Err(e) => json!({"err": format!("Error on getting the available info: {}", e)})
+        }
+                                            })) {
+        Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
+        Err(err) => {
+            eprintln!("Error in rendering dashboard: {}", err);
+            Ok(HttpResponse::InternalServerError()
+                .content_type("text/html; charset=utf-8")
+                .body("Error on rendering the page. Contact your administrator."))
+        }
+    }
 }
 
 /// Sends needed file to the user after security checks

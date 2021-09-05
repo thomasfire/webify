@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webify Dashboard</title>
+    <link rel="stylesheet" type="text/css" href="/static/dashboard.css" media="screen"/>
+</head>
+<body>
+<div class="dashboard">
+    <h2>Dashboard</h2>
+    <div class="devices">
+        <div class="devrow">
+            <div class="devcell">
+                Available devices: <br>
+                <ul class="devlist">
+                {{#each devices as |dev|}}
+                    <li class="devitem"><a href="dev.name">dev</a></li>
+                {{/each}}
+                </ul>
+            </div>
+        </div>
+        <div class="logout">
+            <a href="../logout">Log out</a>
+        </div>
+    </div>
+    <div class="info">
+        <div class="inforow">
+            <div class="infocell">
+                Info: <br>
+                {{#if subpage.err}}
+                    {{subpage.err}}
+                {{else}}
+                    {{> subpage.template}}
+                {{/if}}
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

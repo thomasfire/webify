@@ -3,11 +3,15 @@ use crate::device_trait::*;
 use crate::config;
 use crate::file_device::FileDevice;
 use crate::io_tools;
+use crate::io_tools::exists;
+
+use serde_json::Value as jsVal;
+use serde_json::json;
+
 use std::process::Command;
 use std::fs::{remove_file, remove_dir_all, create_dir_all};
 use std::sync::{Arc, Mutex};
 use std::collections::BTreeMap;
-use crate::io_tools::exists;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct PrinterConfig {
@@ -175,24 +179,9 @@ impl PrinterDevice {
         self.print_from_file(&path)
     }
 
-    fn get_list(&self) -> Result<String, String> {
+    fn get_list(&self) -> Result<jsVal, String> {
         self.queue.lock()
-            .map(|x| format!(r#"
-            <table class="reqtable">
-            <tr>
-            <th>id</th>
-            <th>username</th>
-            <th>payload</th>
-            <th></th>
-            </tr>
-            {}
-            </table>"#, x.values().map(|t| {
-                format!(r#"<tr>
-                            <td>{}</td>
-                            <td>{}</td>
-                            <td>{}</td>
-                        </tr>"#, t.id, t.query.username, t.query.payload)
-            }).collect::<Vec<String>>().join("\n")))
+            .map(|x| { json!({"id": t.id, "username": t.query.username, "payload": t.query.payload}) })
             .map_err(|x| {
                 format!("Error on getting the list: {:?}", x)
             })
@@ -200,99 +189,129 @@ impl PrinterDevice {
 }
 
 impl DeviceRead for PrinterDevice {
-    fn read_data(&self, query: &QCommand) -> Result<String, String> {
+    fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "printer_read" {
             return Err("Error: wrong permission".to_string());
         }
         match query.command.as_str() {
-            "lpstat" => Ok(Self::lpstat()),
-            "printers" => Ok(Self::get_printers()),
+            "lpstat" => Ok(json!({
+                    "template": "printer_device.html",
+                    "message": Self::lpstat(),
+                    "msg_only": 1
+                })
+            ),
+            "printers" => Ok(json!({
+                    "template": "printer_device.html",
+                    "message": Self::get_printers(),
+                    "msg_only": 1
+                })),
             _ => Err("Unknown command".to_string()),
         }
     }
 
-    fn read_status(&self, query: &QCommand) -> Result<String, String> {
+    fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "rstatus" {
             return Err("Error: wrong permission".to_string());
         }
 
-        Ok(format!(r#"<div class="command_form">
-        <form action="/dashboard/printer"  method="post" >
-            <div class="command_f">
-               QType:<br>
-              <input type="text" name="qtype" value="Q" class="qtype">
-              <br>
-              Group:<br>
-              <input type="text" name="group" value="printer_request" class="group">
-              <input type="hidden" name="username" value="{}" class="username">
-              <br>
-              Command:<br>
-              <input type="text" name="command" value="print_file" class="command">
-              <br>
-              <br>
-              Payload:<br>
-              <input type="text" name="payload" value="" class="payload">
-              <br><br>
-            </div>
-              <input type="submit" value="Send" class="button">
-        </form>
-    </div><br>
-    <div class="printer_info">
-    {}
-    </div>
-    "#, query.username, Self::lpstat()))
+        Ok(json!({
+                    "template": "printer_device.html",
+                    "message": Self::lpstat(),
+                    "username": query.username
+        }))
     }
 }
 
 impl DeviceWrite for PrinterDevice {
-    fn write_data(&self, query: &QCommand) -> Result<String, String> {
+    fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "printer_write" {
             eprintln!("Wrong permission: {}, expected: printer_write", query.group);
             return Err("Error: wrong permissions".to_string());
         }
 
-        match query.command.as_str() {
-            "print_file" => self.print_from_file(&format!("{}/{}", self.config.storage, query.payload)),
-            "cancel" => Self::cancel(&query.payload),
-            "cache" => self.cache(&query),
-            "cache_clear" => self.clear_cache(),
-            _ => Err("Unknown command".to_string())
+        match {
+            match query.command.as_str() {
+                "print_file" => self.print_from_file(&format!("{}/{}", self.config.storage, query.payload)),
+                "cancel" => Self::cancel(&query.payload),
+                "cache" => self.cache(&query),
+                "cache_clear" => self.clear_cache(),
+                _ => Err("Unknown command".to_string())
+            }
+        } {
+            Ok(message) => Ok(json!({
+                "template": "printer_device.html",
+                "message": message,
+                "msg_only": 1
+            })),
+            Err(err) => Err(err)
         }
     }
 }
 
 
 impl DeviceRequest for PrinterDevice {
-    fn request_query(&self, query: &QCommand) -> Result<String, String> {
+    fn request_query(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "printer_request" {
             return Err("Error: wrong permissions".to_string());
         }
-        match query.command.as_str() {
-            "print_file" => self.make_request(query),
-            _ => Err("Unknown command".to_string())
+        match {
+            match query.command.as_str() {
+                "print_file" => self.make_request(query),
+                _ => Err("Unknown command".to_string())
+            }
+        } {
+            Ok(message) => Ok(json!({
+                "template": "printer_device.html",
+                "message": message,
+                "msg_only": 1
+            })),
+            Err(err) => Err(err)
         }
     }
 }
 
 impl DeviceConfirm for PrinterDevice {
-    fn confirm_query(&self, query: &QCommand) -> Result<String, String> {
+    fn confirm_query(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "printer_confirm" {
             return Err("Error: wrong permissions".to_string());
         }
         match query.command.as_str() {
-            "confirm" => self.confirm_query(&query.payload),
-            "list" => self.get_list(),
+            "confirm" => match self.confirm_query(&query.payload) {
+                Ok(message) => Ok(json!({
+                    "template": "printer_device.html",
+                    "message": message,
+                    "msg_only": 1
+            })),
+                Err(err) => Err(err)
+            },
+            "list" => match self.get_list() {
+                Ok(message) => Ok(json!({
+                    "template": "printer_device.html",
+                    "istable": 1,
+                    "entries": message
+            })),
+                Err(err) => Err(err)
+            },
             _ => Err("Unknown command".to_string())
         }
     }
 
-    fn dismiss_query(&self, query: &QCommand) -> Result<String, String> {
+    fn dismiss_query(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "printer_confirm" {
             return Err("Error: wrong permissions".to_string());
         }
-        match query.command.as_str() {
-            "dismiss" => self.delete_query(&query.payload),
-            _ => Err("Unknown command".to_string())
+        match {
+            match query.command.as_str() {
+                "dismiss" => self.delete_query(&query.payload),
+                _ => Err("Unknown command".to_string())
+            }
+        } {
+            Ok(message) => Ok(json!({
+                "template": "printer_device.html",
+                "message": message,
+                "msg_only": 1
+            })),
+            Err(err) => Err(err)
         }
     }
 }

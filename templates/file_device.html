@@ -1,0 +1,42 @@
+{{#each subpage.entries as |entry|}}
+    {{#if entry.isfile}}
+        <div class="item"><a href="../download/{{subpage.prepath_fx}}%2F{{entry.filename}}">{{entry.filename}}</a></div>
+    {{else}}
+        <div class="linked_form">
+            <form action="/dashboard/filer"  method="post" id="dir_sender{{entry.dirname}}">
+                <div class="command_f">
+                    <input type="hidden" name="qtype" value="R" class="qtype">
+                    <input type="hidden" name="group" value="filer_read" class="group">
+                    <input type="hidden" name="username" value="{{subpage.username}}" class="username">
+                    <input type="hidden" name="command" value="getlist" class="command">
+                    <input type="hidden" name="payload" value="{{#if subpage.prepath}}{{subpage.prepath}}/{{entry.dirname}}{{else}}{{entry.dirname}}{{/if}}" class="payload">
+                </div>
+                <a href="#" onclick="document.getElementById('dir_sender{{entry.dirname}}').submit();">{{entry.dirname}}</a>
+            </form>
+        </div>
+    {{/if}}
+{{/each}}
+
+<br><br>
+<div class="createnew_form">
+    <form action="/dashboard/filer" method="post" id="create_new">
+        <div class="command_f">
+            <input type="hidden" name="qtype" value="W" class="qtype">
+            <input type="hidden" name="group" value="filer_write" class="group">
+            <input type="hidden" name="username" value="{{subpage.username}}" class="username">
+            <input type="hidden" name="command" value="createdir" class="command">
+            <input type="text" name="payload" value="{{#if subpage.prepath}}{{subpage.prepath}}/{{/if}}" class="payload">
+        </div>
+        <div class="createnew_link">
+            <a href="#" onclick="document.getElementById('create_new').submit();">Create new dir</a>
+        </div>
+    </form>
+</div>
+<br>
+<div class="uploader">
+    Upload a file<br>
+    <form target="../../upload/{{subpage.prepath_fx}}" action="../../upload/{{subpage.prepath_fx}}" method="post" enctype="multipart/form-data">
+        <input type="file" name="file"/><br>
+        <input type="submit" value="Senden">
+    </form>
+</div>

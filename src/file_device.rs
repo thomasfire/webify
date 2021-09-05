@@ -1,17 +1,18 @@
 use crate::device_trait::*;
-
-use std::io::prelude::*;
-
 use crate::dashboard::QCommand;
-use std::fs;
 use crate::io_tools::exists;
+
+use serde_json::Value as jsVal;
+use serde_json::json;
 use flate2::read::{GzDecoder, GzEncoder};
 use flate2::Compression;
+
+use std::fs;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
+use std::io::prelude::*;
 
 struct BufferedFile {
-    //pub path: String,
     pub data: Vec<u8>,
 }
 
@@ -143,7 +144,7 @@ impl FileDevice {
     }
 
     /// Returns the list of files
-    fn get_list(&self, username: &str, payload: &str) -> Result<String, String> {
+    fn get_list(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
             return Err("No container was found".to_string());
@@ -156,61 +157,33 @@ impl FileDevice {
             Ok(f) => f,
             Err(e) => return Err(format!("Error on opening the directory: {:?}", e))
         };
-        let mut list: Vec<String> = entries.filter(|x| x.is_ok())
-            .map(|x| {
+
+        Ok(json!({{
+            "template": "file_device.html",
+            "prepath": payload,
+            "prepath_fx": payload.replace("/", "%2F"),
+            "username": username,
+            "entries": entries.filter(|x| x.is_ok()).map(|x| {
                 match x {
                     Ok(d) => {
                         if d.path().is_file() {
-                            format!("<div class=\"item\"><a href=\"../download/{}%2F{}\">{}</a></div>", payload.replace("/", "%2F"), d.file_name().to_string_lossy(), d.file_name().to_string_lossy())
+                            json!({
+                                "isfile": 1,
+                                "filename": d.file_name().to_string_lossy()
+                            })
                         } else {
-                            let name = d.file_name().to_string_lossy().to_string();
-                            format!(r#"<div class="linked_form">
-                                        <form action="/dashboard/filer"  method="post" id="dir_sender{}">
-                                            <div class="command_f">
-                                              <input type="hidden" name="qtype" value="R" class="qtype">
-                                              <input type="hidden" name="group" value="filer_read" class="group">
-                                              <input type="hidden" name="username" value="{}" class="username">
-                                              <input type="hidden" name="command" value="getlist" class="command">
-                                              <input type="hidden" name="payload" value="{}{}" class="payload">
-                                            </div>
-                                              <a href=" #" onclick="document.getElementById('dir_sender{}').submit();">{}</a>
-                                        </form>
-                            </div>"#, name, username, if payload.len() > 0 { payload.to_string() + "/" } else { "".to_string() }, name, name, name)
+                            json!({
+                                "dirname": d.file_name().to_string_lossy().to_string()
+                            })
                         }
                     }
-                    Err(_) => format!(""),
+                    Err(_) => json!(),
                 }
-            }).collect();
-
-        list.push(format!(r#"<br><br><div class="createnew_form">
-                                        <form action="/dashboard/filer" method="post" id="create_new">
-                                            <div class="command_f">
-                                              <input type="hidden" name="qtype" value="W" class="qtype">
-                                              <input type="hidden" name="group" value="filer_write" class="group">
-                                              <input type="hidden" name="username" value="{}" class="username">
-                                              <input type="hidden" name="command" value="createdir" class="command">
-                                              <input type="text" name="payload" value="{}" class="payload">
-                                            </div>
-                                            <div class="createnew_link">
-                                              <a href=" #" onclick="document.getElementById('create_new').submit();">Create new dir</a>
-                                            </div>
-                                        </form>
-                            </div>"#, username, if payload.len() > 0 { payload.to_string() + "/" } else { "".to_string() }));
-
-        list.push(format!(r#"<br>
-        <div class="uploader">
-                Upload a file<br>
-                <form target="../../upload/{}" action="../../upload/{}" method="post" enctype="multipart/form-data">
-                    <input type="file" name="file"/><br>
-                    <input type="submit" value="Senden">
-                </form>
-            </div>
-        "#, payload.replace("/", "%2F"), payload.replace("/", "%2F")));
-
-        Ok(list.join("<br>"))
+            })
+        }}))
     }
 
-    fn create_dir(&self, username: &str, payload: &str) -> Result<String, String> {
+    fn create_dir(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let filepath = format!("{}/{}", &self.storage, username);
         println!("Create {}/{}", filepath, payload);
         match fs::create_dir_all(format!("{}/{}", filepath, payload)) {
@@ -225,7 +198,7 @@ impl FileDevice {
 
 
 impl DeviceRead for FileDevice {
-    fn read_data(&self, query: &QCommand) -> Result<String, String> {
+    fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
         if query.group != "filer_read" {
@@ -238,7 +211,7 @@ impl DeviceRead for FileDevice {
         }
     }
 
-    fn read_status(&self, query: &QCommand) -> Result<String, String> {
+    fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
         if query.group != "rstatus" {
             return Err("No access to this action".to_string());
         }
@@ -248,7 +221,7 @@ impl DeviceRead for FileDevice {
 
 
 impl DeviceWrite for FileDevice {
-    fn write_data(&self, query: &QCommand) -> Result<String, String> {
+    fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
         if query.group != "filer_write" {
@@ -264,17 +237,17 @@ impl DeviceWrite for FileDevice {
 
 
 impl DeviceRequest for FileDevice {
-    fn request_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn request_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 }
 
 impl DeviceConfirm for FileDevice {
-    fn confirm_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn confirm_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 
-    fn dismiss_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn dismiss_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 }
