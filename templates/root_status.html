@@ -1,15 +1,15 @@
 <div class="command_form">
-    <form action="/dashboard/printer" method="post">
+    <form action="/dashboard/root"  method="post" >
         <div class="command_f">
             QType:<br>
-            <input type="text" name="qtype" value="Q" class="qtype">
+            <input type="text" name="qtype" value="R" class="qtype">
             <br>
             Group:<br>
-            <input type="text" name="group" value="printer_request" class="group">
+            <input type="text" name="group" value="root_read" class="group">
             <input type="hidden" name="username" value="{{subpage.username}}" class="username">
             <br>
             Command:<br>
-            <input type="text" name="command" value="print_file" class="command">
+            <input type="text" name="command" value="" class="command">
             <br>
             <br>
             Payload:<br>
@@ -18,7 +18,4 @@
         </div>
         <input type="submit" value="Send" class="button">
     </form>
-</div><br>
-<div class="printer_info">
-    {{subpage.message}}
 </div>

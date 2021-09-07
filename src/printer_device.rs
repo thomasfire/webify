@@ -37,7 +37,7 @@ pub static PRINTER_CONFIG_PATH: &str = "printer_config.toml";
 impl PrinterDevice {
     pub fn new(file_manager: Arc<FileDevice>) -> PrinterDevice {
         let config = config::read_config::<PrinterConfig>(PRINTER_CONFIG_PATH).unwrap_or(PrinterConfig
-            { printer: "".to_string(), storage: "".to_string() });
+        { printer: "".to_string(), storage: "".to_string() });
         PrinterDevice { config, filer: file_manager.clone(), queue: Arc::new(Mutex::new(BTreeMap::new())) }
     }
 
@@ -195,15 +195,13 @@ impl DeviceRead for PrinterDevice {
         }
         match query.command.as_str() {
             "lpstat" => Ok(json!({
-                    "template": "printer_device.html",
+                    "template": "simple_message.html",
                     "message": Self::lpstat(),
-                    "msg_only": 1
                 })
             ),
             "printers" => Ok(json!({
-                    "template": "printer_device.html",
+                    "template": "simple_message.html",
                     "message": Self::get_printers(),
-                    "msg_only": 1
                 })),
             _ => Err("Unknown command".to_string()),
         }
@@ -239,9 +237,8 @@ impl DeviceWrite for PrinterDevice {
             }
         } {
             Ok(message) => Ok(json!({
-                "template": "printer_device.html",
+                "template": "simple_message.html",
                 "message": message,
-                "msg_only": 1
             })),
             Err(err) => Err(err)
         }
@@ -261,9 +258,8 @@ impl DeviceRequest for PrinterDevice {
             }
         } {
             Ok(message) => Ok(json!({
-                "template": "printer_device.html",
+                "template": "simple_message.html",
                 "message": message,
-                "msg_only": 1
             })),
             Err(err) => Err(err)
         }
@@ -278,16 +274,14 @@ impl DeviceConfirm for PrinterDevice {
         match query.command.as_str() {
             "confirm" => match self.confirm_query(&query.payload) {
                 Ok(message) => Ok(json!({
-                    "template": "printer_device.html",
+                    "template": "simple_message.html",
                     "message": message,
-                    "msg_only": 1
             })),
                 Err(err) => Err(err)
             },
             "list" => match self.get_list() {
                 Ok(message) => Ok(json!({
-                    "template": "printer_device.html",
-                    "istable": 1,
+                    "template": "printer_table.html",
                     "entries": message
             })),
                 Err(err) => Err(err)
@@ -307,9 +301,8 @@ impl DeviceConfirm for PrinterDevice {
             }
         } {
             Ok(message) => Ok(json!({
-                "template": "printer_device.html",
+                "template": "simple_message.html",
                 "message": message,
-                "msg_only": 1
             })),
             Err(err) => Err(err)
         }

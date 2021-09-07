@@ -3,20 +3,18 @@ extern crate crypto;
 extern crate serde_json;
 extern crate rand;
 
-use std::collections::{HashMap, BTreeSet};
+use crate::models::{Groups, UserAdd, User, History, GroupAdd};
+use crate::schema::*;
 
+use crypto::digest::Digest;
+use crypto::sha2::Sha256;
 use rand::random;
-
 use diesel::connection::SimpleConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error as dError;
 
-use crate::models::{Groups, UserAdd, User, History, GroupAdd};
-use crate::schema::*;
-
-use self::crypto::digest::Digest;
-use self::crypto::sha2::Sha256;
+use std::collections::{HashMap, BTreeSet};
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -136,7 +134,7 @@ pub fn get_all_history(pool: &Pool) -> Result<Vec<History>, String> {
     };
 
 
-    let hist: Vec<History> = match history::table.order(history::columns::id.desc()).load::<History>(&connection) {
+    let hist: Vec<History> = match history::table.order(history::columns::id.desc()).limit(100).load::<History>(&connection) {
         Ok(d) => d,
         Err(e) => return Err(format!("Error on loading history: {:?}", e)),
     };

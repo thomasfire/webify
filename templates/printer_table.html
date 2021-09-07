@@ -1,0 +1,14 @@
+<table class="reqtable">
+    <tr>
+        <th>id</th>
+        <th>username</th>
+        <th>payload</th>
+    </tr>
+    {{#each subpage.entries as |entry|}}
+    <tr>
+        <td>{{entry.id}}</td>
+        <td>{{entry.username}}</td>
+        <td>{{entry.payload}}</td>
+    </tr>
+    {{/each}}
+</table>

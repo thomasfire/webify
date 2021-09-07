@@ -1,10 +1,12 @@
-use crate::device_trait::*;
-use diesel::{r2d2, SqliteConnection};
-use diesel::r2d2::ConnectionManager;
-
 use crate::database::{get_all_users, get_all_history, get_all_groups, insert_user, update_user_pass, update_user_group, insert_group, update_group};
 use crate::models::LineWebify;
 use crate::dashboard::QCommand;
+use crate::device_trait::*;
+
+use diesel::{r2d2, SqliteConnection};
+use diesel::r2d2::ConnectionManager;
+use serde_json::Value as jsVal;
+use serde_json::json;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -18,75 +20,40 @@ impl RootDev {
         RootDev { db_pool: db.clone() }
     }
 
-    fn read_users(&self) -> Result<String, String> {
+    fn read_users(&self) -> Result<jsVal, String> {
         let res = match get_all_users(&self.db_pool) {
             Ok(d) => d,
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
 
-        if res.len() == 0 {
-            return Ok("".to_string());
-        } else {
-            return Ok(format!("<table class=\"utable\">
-            <tr>
-            <th>id</th>
-            <th>username</th>
-            <th>password</th>
-            <th>cookie</th>
-            <th>groups</th>
-            <th>wrong attempts</th>
-            </tr>
-            {}
-            </table>", res.iter().map(|x| x.get_content())
-                .collect::<Vec<String>>()
-                .join("\n")));
-        }
+        Ok(json!({
+            "template": "root_users_table.html",
+            "users": res.iter().map(|x| x.get_content())
+        }))
     }
 
-    fn read_history(&self) -> Result<String, String> {
+    fn read_history(&self) -> Result<jsVal, String> {
         let res = match get_all_history(&self.db_pool) {
             Ok(d) => d,
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
-
-        if res.len() == 0 {
-            return Ok("".to_string());
-        } else {
-            return Ok(format!("<table class=\"htable\">
-            <tr>
-            <th>id</th>
-            <th>username</th>
-            <th>query</th>
-            <th>timestamp</th>
-            </tr>
-            {}
-            </table>", res[..100].iter().map(|x| x.get_content())
-                .collect::<Vec<String>>()
-                .join("\n")));
-        }
+        Ok(json!({
+            "template": "root_history_table.html",
+            "users": res.iter().map(|x| x.get_content())
+        }))
     }
 
 
-    fn read_groups(&self) -> Result<String, String> {
+    fn read_groups(&self) -> Result<jsVal, String> {
         let res = match get_all_groups(&self.db_pool) {
             Ok(d) => d,
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
 
-        if res.len() == 0 {
-            return Ok("".to_string());
-        } else {
-            return Ok(format!("<table class=\"gtable\">
-            <tr>
-            <th>id</th>
-            <th>group name</th>
-            <th>devices</th>
-            </tr>
-            {}
-            </table>", res.iter().map(|x| x.get_content())
-                .collect::<Vec<String>>()
-                .join("\n")));
-        }
+        Ok(json!({
+            "template": "root_groups_table.html",
+            "users": res.iter().map(|x| x.get_content())
+        }))
     }
 
     fn insert_new_user(&self, query: &str) -> Result<String, String> {
@@ -184,7 +151,7 @@ impl RootDev {
 
 
 impl DeviceRead for RootDev {
-    fn read_data(&self, query: &QCommand) -> Result<String, String> {
+    fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
         if query.group != "root_read" {
             return Err("No access".to_string())
@@ -197,37 +164,20 @@ impl DeviceRead for RootDev {
         }
     }
 
-    fn read_status(&self, query: &QCommand) -> Result<String, String> {
-        Ok(format!(r#"<div class="command_form">
-        <form action="/dashboard/root"  method="post" >
-            <div class="command_f">
-               QType:<br>
-              <input type="text" name="qtype" value="R" class="qtype">
-              <br>
-              Group:<br>
-              <input type="text" name="group" value="root_read" class="group">
-              <input type="hidden" name="username" value="{}" class="username">
-              <br>
-              Command:<br>
-              <input type="text" name="command" value="" class="command">
-              <br>
-              <br>
-              Payload:<br>
-              <input type="text" name="payload" value="" class="payload">
-              <br><br>
-            </div>
-              <input type="submit" value="Send" class="button">
-        </form>
-    </div>"#, query.username))
+    fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
+        Ok(json!({
+            "template": "root_status.html",
+            "username": query.username}))
     }
 }
 
 impl DeviceWrite for RootDev {
-    fn write_data(&self, query: &QCommand) -> Result<String, String> {
+    fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
         if query.group != "root_write" {
             return Err("No access".to_string())
         }
+
         match command {
             "add_user" => self.insert_new_user(query.payload.as_str()),
             "update_user_password" => self.update_user_pass(query.payload.as_str()),
@@ -235,23 +185,27 @@ impl DeviceWrite for RootDev {
             "add_group" => self.insert_new_group(query.payload.as_str()),
             "update_group" => self.update_group(query.payload.as_str()),
             _ => Err(format!("Unknown command"))
-        }
+        }.map(|mess|{
+             json!({
+                "template": "simple_message.html",
+                "message": mess})
+         })
     }
 }
 
 
 impl DeviceRequest for RootDev {
-    fn request_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn request_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 }
 
 impl DeviceConfirm for RootDev {
-    fn confirm_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn confirm_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 
-    fn dismiss_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn dismiss_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 }

@@ -1,10 +1,12 @@
 use chrono::NaiveDateTime;
+use serde_json::Value as jsVal;
+use serde_json::json;
 
 use crate::schema::*;
 
 /// Represents that structure can be inserted in the table
 pub trait LineWebify {
-    fn get_content(&self) -> String;
+    fn get_content(&self) -> jsVal;
 }
 
 /// Represents user structure.
@@ -21,16 +23,15 @@ pub struct User {
 }
 
 impl LineWebify for User {
-    fn get_content(&self) -> String {
-        format!("<tr>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        </tr>", self.id, self.name, self.password, self.cookie.as_ref().unwrap_or(&"".to_string()),
-                self.groups, self.wrong_attempts.unwrap_or(0))
+    fn get_content(&self) -> jsVal {
+        json!({
+            "id": self.id,
+            "name": self.name,
+            "password": self.password,
+            "cookie": self.cookie.as_ref().unwrap_or(&"".to_string()),
+            "groups": self.groups,
+            "wrong_attempts": self.wrong_attempts.unwrap_or(0),
+        })
     }
 }
 
@@ -52,13 +53,13 @@ pub struct History {
 }
 
 impl LineWebify for History {
-    fn get_content(&self) -> String {
-        format!("<tr>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        </tr>", self.id, self.username.as_ref().unwrap_or(&"".to_string()), self.get_query, self.timestamp.format("%Y-%m-%d %H:%M:%S"))
+    fn get_content(&self) -> jsVal {
+        json!({
+            "id": self.id,
+            "username": self.username.as_ref().unwrap_or(&"".to_string()),
+            "get_query": self.get_query,
+            "timestamp": self.timestamp.format("%Y-%m-%d %H:%M:%S")
+        })
     }
 }
 
@@ -79,12 +80,12 @@ pub struct Groups {
 
 
 impl LineWebify for Groups {
-    fn get_content(&self) -> String {
-        format!("<tr>
-        <td>{}</td>
-        <td>{}</td>
-        <td>{}</td>
-        </tr>", self.id, self.g_name, self.devices)
+    fn get_content(&self) -> jsVal {
+        json!({
+            "id": self.id,
+            "g_name": self.g_name,
+            "devices": self.devices
+        })
     }
 }
 

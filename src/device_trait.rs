@@ -1,4 +1,5 @@
 use serde_json::Value as jsVal;
+
 use crate::dashboard::QCommand;
 
 /// See examples in `src/printer_device.rs`, `src/file_device.rs` and `src/root_device.rs`

@@ -1,0 +1,20 @@
+<table class="utable">
+    <tr>
+        <th>id</th>
+        <th>username</th>
+        <th>password</th>
+        <th>cookie</th>
+        <th>groups</th>
+        <th>wrong attempts</th>
+    </tr>
+    {{#each subpage.users as |user|}}
+    <tr>
+        <td>{{user.id}}</td>
+        <td>{{user.name}}</td>
+        <td>{{user.password}}</td>
+        <td>{{user.cookie}}</td>
+        <td>{{user.groups}}</td>
+        <td>{{user.wrong_attempts}}</td>
+    </tr>
+    {{/each}}
+</table>

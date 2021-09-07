@@ -1,0 +1,14 @@
+<table class="gtable">
+    <tr>
+        <th>id</th>
+        <th>group name</th>
+        <th>devices</th>
+    </tr>
+    {{#each subpage.groups as |group|}}
+    <tr>
+        <td>{{group.id}}</td>
+        <td>{{group.g_name}}</td>
+        <td>{{group.devices}}</td>
+    </tr>
+    {{/each}}
+</table>

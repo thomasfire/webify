@@ -1,0 +1,16 @@
+<table class="htable">
+    <tr>
+        <th>id</th>
+        <th>username</th>
+        <th>query</th>
+        <th>timestamp</th>
+    </tr>
+    {{#each subpage.entries as |entry|}}
+    <tr>
+        <td>{{entry.id}}</td>
+        <td>{{entry.username}}</td>
+        <td>{{entry.get_query}}</td>
+        <td>{{entry.timestamp}}</td>
+    </tr>
+    {{/each}}
+</table>
