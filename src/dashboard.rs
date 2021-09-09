@@ -17,6 +17,7 @@ use diesel::r2d2::{self, ConnectionManager};
 use diesel::SqliteConnection;
 use futures::StreamExt;
 use serde_json::Value as jsVal;
+use serde_json::json;
 use actix_multipart::Multipart;
 
 use std::sync::Arc;
@@ -235,7 +236,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
-    match mdata.templater.render_template("dashboard.html",
+    match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
                                               "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
                                               "subpage": get_available_info(&mdata, &user, info.as_str())
@@ -270,7 +271,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
         return Ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
     }
 
-    match mdata.templater.render_template("dashboard.html",
+    match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
                                               "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
                                               "subpage": match mdata.dispatch(&user, info.as_str(), form.0) {
@@ -354,7 +355,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
     }
     let mut context_data: BTreeMap<String, String> = BTreeMap::new();
     context_data.insert("target".to_string(), info.to_string());
-    match mdata.templater.render_template("upload.html", &context_data) {
+    match mdata.templater.render_template("upload.hbs", &context_data) {
         Ok(data) => Ok(HttpResponse::Ok().body(data)),
         Err(err) => {
             eprintln!("Error in rendering the page: {}", err);

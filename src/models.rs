@@ -58,7 +58,7 @@ impl LineWebify for History {
             "id": self.id,
             "username": self.username.as_ref().unwrap_or(&"".to_string()),
             "get_query": self.get_query,
-            "timestamp": self.timestamp.format("%Y-%m-%d %H:%M:%S")
+            "timestamp": self.timestamp.format("%Y-%m-%d %H:%M:%S").to_string()
         })
     }
 }

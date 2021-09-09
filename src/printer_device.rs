@@ -181,7 +181,13 @@ impl PrinterDevice {
 
     fn get_list(&self) -> Result<jsVal, String> {
         self.queue.lock()
-            .map(|x| { json!({"id": t.id, "username": t.query.username, "payload": t.query.payload}) })
+            .map(|x| {
+                json!([
+                    x.values().map(|t| {
+                        json!({"id": t.id, "username": t.query.username, "payload": t.query.payload})
+                    }).collect::<jsVal>()
+                ])
+            })
             .map_err(|x| {
                 format!("Error on getting the list: {:?}", x)
             })
@@ -195,12 +201,12 @@ impl DeviceRead for PrinterDevice {
         }
         match query.command.as_str() {
             "lpstat" => Ok(json!({
-                    "template": "simple_message.html",
+                    "template": "simple_message.hbs",
                     "message": Self::lpstat(),
                 })
             ),
             "printers" => Ok(json!({
-                    "template": "simple_message.html",
+                    "template": "simple_message.hbs",
                     "message": Self::get_printers(),
                 })),
             _ => Err("Unknown command".to_string()),
@@ -213,9 +219,9 @@ impl DeviceRead for PrinterDevice {
         }
 
         Ok(json!({
-                    "template": "printer_device.html",
-                    "message": Self::lpstat(),
-                    "username": query.username
+            "template": "printer_device.hbs",
+            "message": Self::lpstat(),
+            "username": query.username
         }))
     }
 }
@@ -237,7 +243,7 @@ impl DeviceWrite for PrinterDevice {
             }
         } {
             Ok(message) => Ok(json!({
-                "template": "simple_message.html",
+                "template": "simple_message.hbs",
                 "message": message,
             })),
             Err(err) => Err(err)
@@ -258,7 +264,7 @@ impl DeviceRequest for PrinterDevice {
             }
         } {
             Ok(message) => Ok(json!({
-                "template": "simple_message.html",
+                "template": "simple_message.hbs",
                 "message": message,
             })),
             Err(err) => Err(err)
@@ -274,14 +280,14 @@ impl DeviceConfirm for PrinterDevice {
         match query.command.as_str() {
             "confirm" => match self.confirm_query(&query.payload) {
                 Ok(message) => Ok(json!({
-                    "template": "simple_message.html",
+                    "template": "simple_message.hbs",
                     "message": message,
             })),
                 Err(err) => Err(err)
             },
             "list" => match self.get_list() {
                 Ok(message) => Ok(json!({
-                    "template": "printer_table.html",
+                    "template": "printer_table.hbs",
                     "entries": message
             })),
                 Err(err) => Err(err)
@@ -301,7 +307,7 @@ impl DeviceConfirm for PrinterDevice {
             }
         } {
             Ok(message) => Ok(json!({
-                "template": "simple_message.html",
+                "template": "simple_message.hbs",
                 "message": message,
             })),
             Err(err) => Err(err)

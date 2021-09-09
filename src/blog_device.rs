@@ -8,13 +8,17 @@ use crate::shikimori_scraper::run_parsing;
 
 use redis::Commands;
 use r2d2_redis::{RedisConnectionManager, r2d2};
+use serde_json::Value as jsVal;
+use serde_json::json;
+use serde_json::from_str as js_from_str;
+
 use std::ops::DerefMut;
 
 type RedisPool = r2d2::Pool<RedisConnectionManager>;
 
 #[derive(Clone)]
 pub struct BlogDevice {
-    conn_pool: RedisPool
+    conn_pool: RedisPool,
 }
 
 impl BlogDevice {
@@ -27,7 +31,7 @@ impl BlogDevice {
         BlogDevice { conn_pool: pool }
     }
 
-    fn new_post(&self, _username: &str, payload: &str) -> Result<String, String> {
+    fn new_post(&self, _username: &str, payload: &str) -> Result<jsVal, String> {
         let post: NewsPostParsed = match parse_post(payload) {
             Ok(val) => val,
             Err(err) => return Err(format!("Invalid post: {}", err))
@@ -48,39 +52,17 @@ impl BlogDevice {
             .map_err(|err| { format!("Redis err: {:?}", err) })?;
         curr_conn.deref_mut().set("ilast_post", curr_id).
             map_err(|err| { format!("Redis err: {:?}", err) })?;
-        Ok(format!("OK"))
+        Ok(json!({
+            "template": "simple_message.hbs",
+            "message": "OK",
+        }))
     }
 
-    fn shownew_post(&self, username: &str, _payload: &str) -> Result<String, String> {
-        Ok(format!(r#"
-        <div class="postnewpost">
-                      <script>
-                        function send_post() {{
-                            let title_t = document.getElementById('payload_post_title');
-                            let bod_t = document.getElementById('payload_post_body');
-                            document.getElementById('payload_inpt').value = "<title>" + title_t.value + "</title><body>" + bod_t.value + "</body>";
-                            document.getElementById('post_sender').submit();
-                        }}
-                    </script>
-
-<textarea name="title" class="payload" id="payload_post_title" form="">Your title here...</textarea>
-<textarea name="body" class="payload" id="payload_post_body" form="">Your body here...</textarea>
-
-<form action="/dashboard/blogdev" method="post" id="post_sender">
-    <div class="command_f">
-        <input type="hidden" name="qtype" value="W" class="qtype">
-        <input type="hidden" name="group" value="blogdev_write" class="group">
-        <input type="hidden" name="username" value="{}" class="username">
-        <input type="hidden" name="command" value="createpost" class="command">
-        <input type="hidden" name="payload" class="payload" id="payload_inpt">
-    </div>
-    <a onclick="send_post();" class="post_sender">Send Post</a>
-</form>
-</div>
-        "#, username))
+    fn shownew_post(&self, username: &str, _payload: &str) -> Result<jsVal, String> {
+        Ok(json!({"template": "blog_new_post.hbs", "username": username}))
     }
 
-    fn get_post(&self, username: &str, payload: &str) -> Result<String, String> {
+    fn get_post(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let post_id: u32 = payload.parse().map_err(|err| { format!("Couldn't parse the argument: {:?}", err) })?;
         let mut curr_conn = match self.conn_pool.get() {
             Ok(val) => val,
@@ -94,37 +76,24 @@ impl BlogDevice {
             .map_err(|err| { format!("Redis err: {:?}", err) })?;
         let cmms: Vec<String> = curr_conn.deref_mut().lrange(&format!("cmms_{}", post_id), 0, cmmcount as isize)
             .map_err(|err| { format!("Redis err: {:?}", err) })?;
-        let cmms_block = format!(r#"<div class="cmmblock">
-            <div class="cmmcounter">{}</div>
-            {}
-        </div>"#, cmmcount, cmms.iter().map(|elem| { format!("<div class=\"cmmitem\">{}</div>", elem) }).collect::<Vec<String>>().join("\n"));
 
-        Ok(format!(r#"<div class="posttitle">{}</div>
-                      <div class="postbody">{}</div>
-                      <div class="postbottom">{}</div>
-                      <div class="postnewcmm">
-                      <script>
-                        function send_cmm() {{
-                            let cmm_t = document.getElementById('payload_cmm_new');
-                            document.getElementById('payload_inpt').value = "<id>{}</id><text>" + cmm_t.value + "</text>";
-                            document.getElementById('cmm_sender').submit();
-                        }}
-                    </script>
-
-<textarea name="payload_t" class="payload_t" id="payload_cmm_new" form="">Your comment here...</textarea>
-
-<form action="/dashboard/blogdev" method="post" id="cmm_sender">
-    <div class="command_f">
-        <input type="hidden" name="qtype" value="Q" class="qtype">
-        <input type="hidden" name="group" value="blogdev_request" class="group">
-        <input type="hidden" name="username" value="{}" class="username">
-        <input type="hidden" name="command" value="createcmm" class="command">
-        <input type="hidden" name="payload" class="payload" id="payload_inpt">
-    </div>
-    <a onclick="send_cmm();" class="cmmsender">Send Comment</a>
-</form>
-</div>
-                      "#, title, body, cmms_block, post_id, username))
+        Ok(json!({
+            "template": "blog_post_view.hbs",
+            "username": username,
+            "post_id": post_id,
+            "title": title,
+            "body": body,
+            "cmmcount": cmmcount,
+            "cmms": cmms.iter().map(|elem| {
+                match js_from_str(&elem) {
+                    Ok(data) => data,
+                    Err(err) => {
+                        eprintln!("Error in parsing cmm: {:?}", err);
+                        json!({})
+                    }
+                }
+            }).collect::<jsVal>()
+        }))
     }
 
     fn new_cmm(&self, username: &str, payload: &str) -> Result<String, String> {
@@ -138,13 +107,13 @@ impl BlogDevice {
         curr_conn.deref_mut().set(&format!("cmmcount_{}", cmm_parsed.post_id), cmmcount + 1)
             .map_err(|err| { format!("Redis err: {:?}", err) })?;
         curr_conn.deref_mut().rpush(&format!("cmms_{}", cmm_parsed.post_id),
-                                    format!(r#"<div class="cmmauth">{}</div><div class="cmmtime">{}</div><div class="cmmtext">{}</div>"#,
+                                    format!(r#"{{"username": "{}", "timestamp": "{}", "text": "{}"}}"#,
                                             username, cmm_parsed.date, cmm_parsed.text)).map_err(|err| { format!("Redis err: {:?}", err) })?;
 
         Ok("OK".to_string())
     }
 
-    fn get_list_of_posts(&self, username: &str) -> Result<String, String> {
+    fn get_list_of_posts(&self, username: &str) -> Result<jsVal, String> {
         let last_key = "ilast_post";
 
         let mut curr_conn = match self.conn_pool.get() {
@@ -153,49 +122,32 @@ impl BlogDevice {
         };
 
         let last_id: u32 = curr_conn.deref_mut().get(last_key).unwrap_or(0) + 1;
-        let mut buffer_v: Vec<String> = vec![];
+        let mut buffer_v: Vec<jsVal> = vec![];
         buffer_v.reserve(last_id as usize);
         for x in 0..last_id {
             let title: String = curr_conn.deref_mut().get(&format!("title_{}", x)).unwrap_or("".to_string());
             if title.len() < 5 {
                 continue;
             }
-            buffer_v.push(format!(r#"<div class="linked_form">
-                                        <form action="/dashboard/blogdev"  method="post" id="postpage_sender{}">
-                                            <div class="command_f">
-                                              <input type="hidden" name="qtype" value="R" class="qtype">
-                                              <input type="hidden" name="group" value="blogdev_read" class="group">
-                                              <input type="hidden" name="username" value="{}" class="username">
-                                              <input type="hidden" name="command" value="getpost" class="command">
-                                              <input type="hidden" name="payload" value="{}" class="payload">
-                                            </div>
-                                              <a onclick="document.getElementById('postpage_sender{}').submit();">{}</a>
-                                        </form>
-                            </div>"#, x, username, x, x, title));
+            buffer_v.push(json!({
+                "id": x,
+                "title": title
+            }));
         }
-        Ok(format!(r#"<div class="post_list_block">
-            <div class="posts_list_counter">{}</div>
-            {}
-        </div>
-        <div class="ln_create_post">
-        <form action="/dashboard/blogdev"  method="post" id="postpage_sender">
-                <div class="command_f">
-                  <input type="hidden" name="qtype" value="W" class="qtype">
-                  <input type="hidden" name="group" value="blogdev_write" class="group">
-                  <input type="hidden" name="username" value="{}" class="username">
-                  <input type="hidden" name="command" value="showcreatepost" class="command">
-                  <input type="hidden" name="payload" value="" class="payload">
-                </div>
-                  <a onclick="document.getElementById('postpage_sender').submit();">Create a post</a>
-            </form>
-        </div>
-        "#, buffer_v.len(), buffer_v.join("\n"), &username))
+
+        Ok(json!({
+            "template": "blog_post_list.hbs",
+            "username": username,
+            "post_count": buffer_v.len(),
+            "posts": buffer_v,
+            "can_post": 1 // TODO handle this correctrly on migrating to the redis
+        }))
     }
 }
 
 
 impl DeviceRead for BlogDevice {
-    fn read_data(&self, query: &QCommand) -> Result<String, String> {
+    fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
         if query.group != "blogdev_read" {
@@ -208,7 +160,7 @@ impl DeviceRead for BlogDevice {
         }
     }
 
-    fn read_status(&self, query: &QCommand) -> Result<String, String> {
+    fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
         if query.group != "rstatus" {
             return Err("No access to this action".to_string());
         }
@@ -218,7 +170,7 @@ impl DeviceRead for BlogDevice {
 
 
 impl DeviceWrite for BlogDevice {
-    fn write_data(&self, query: &QCommand) -> Result<String, String> {
+    fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
         if query.group != "blogdev_write" {
@@ -235,26 +187,32 @@ impl DeviceWrite for BlogDevice {
 
 
 impl DeviceRequest for BlogDevice {
-    fn request_query(&self, query: &QCommand) -> Result<String, String> {
+    fn request_query(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
         if query.group != "blogdev_request" {
             return Err("No access to this action".to_string());
         }
 
+
         match command {
             "createcmm" => self.new_cmm(&query.username, &query.payload),
             _ => return Err(format!("Unknown for BlogDevice.read command: {}", command))
-        }
+        }.map(|data| {
+            json!({
+                "template": "simple_message.hbs",
+                "message": data
+            })
+        })
     }
 }
 
 impl DeviceConfirm for BlogDevice {
-    fn confirm_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn confirm_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 
-    fn dismiss_query(&self, _query: &QCommand) -> Result<String, String> {
+    fn dismiss_query(&self, _query: &QCommand) -> Result<jsVal, String> {
         Err("Unimplemented".to_string())
     }
 }

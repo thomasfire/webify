@@ -27,8 +27,8 @@ impl RootDev {
         };
 
         Ok(json!({
-            "template": "root_users_table.html",
-            "users": res.iter().map(|x| x.get_content())
+            "template": "root_users_table.hbs",
+            "users": res.iter().map(|x| x.get_content()).collect::<jsVal>()
         }))
     }
 
@@ -38,8 +38,8 @@ impl RootDev {
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
         Ok(json!({
-            "template": "root_history_table.html",
-            "users": res.iter().map(|x| x.get_content())
+            "template": "root_history_table.hbs",
+            "users": res.iter().map(|x| x.get_content()).collect::<jsVal>()
         }))
     }
 
@@ -51,8 +51,8 @@ impl RootDev {
         };
 
         Ok(json!({
-            "template": "root_groups_table.html",
-            "users": res.iter().map(|x| x.get_content())
+            "template": "root_groups_table.hbs",
+            "users": res.iter().map(|x| x.get_content()).collect::<jsVal>()
         }))
     }
 
@@ -166,7 +166,7 @@ impl DeviceRead for RootDev {
 
     fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
         Ok(json!({
-            "template": "root_status.html",
+            "template": "root_status.hbs",
             "username": query.username}))
     }
 }
@@ -187,7 +187,7 @@ impl DeviceWrite for RootDev {
             _ => Err(format!("Unknown command"))
         }.map(|mess|{
              json!({
-                "template": "simple_message.html",
+                "template": "simple_message.hbs",
                 "message": mess})
          })
     }

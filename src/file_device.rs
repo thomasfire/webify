@@ -158,8 +158,8 @@ impl FileDevice {
             Err(e) => return Err(format!("Error on opening the directory: {:?}", e))
         };
 
-        Ok(json!({{
-            "template": "file_device.html",
+        Ok(json!({
+            "template": "file_device.hbs",
             "prepath": payload,
             "prepath_fx": payload.replace("/", "%2F"),
             "username": username,
@@ -177,10 +177,10 @@ impl FileDevice {
                             })
                         }
                     }
-                    Err(_) => json!(),
+                    Err(_) => json!({}),
                 }
-            })
-        }}))
+            }).collect::<jsVal>()
+        }))
     }
 
     fn create_dir(&self, username: &str, payload: &str) -> Result<jsVal, String> {
@@ -189,7 +189,7 @@ impl FileDevice {
         match fs::create_dir_all(format!("{}/{}", filepath, payload)) {
             Ok(_) => return Ok(match self.get_list(username, payload) {
                 Ok(r) => r,
-                Err(e) => format!("Error on getting list after created the dir: {}", e)
+                Err(e) => return Err(format!("Error on getting list after created the dir: {}", e))
             }),
             Err(e) => return Err(format!("Error on making the directories: {:?}", e))
         };

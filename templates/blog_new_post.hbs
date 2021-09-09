@@ -1,0 +1,24 @@
+<div class="postnewpost">
+    <script type="text/javascript">
+        function send_post() {
+            let title_t = document.getElementById('payload_post_title');
+            let bod_t = document.getElementById('payload_post_body');
+            document.getElementById('payload_inpt').value = "<title>" + title_t.value + "</title><body>" + bod_t.value + "</body>";
+            document.getElementById('post_sender').submit();
+        }
+    </script>
+
+    <textarea name="title" class="payload" id="payload_post_title" form="">Your title here...</textarea>
+    <textarea name="body" class="payload" id="payload_post_body" form="">Your body here...</textarea>
+
+    <form action="/dashboard/blogdev" method="post" id="post_sender">
+        <div class="command_f">
+            <input type="hidden" name="qtype" value="W" class="qtype">
+            <input type="hidden" name="group" value="blogdev_write" class="group">
+            <input type="hidden" name="username" value="{{subpage.username}}" class="username">
+            <input type="hidden" name="command" value="createpost" class="command">
+            <input type="hidden" name="payload" class="payload" id="payload_inpt">
+        </div>
+        <a onclick="send_post();" class="post_sender">Send Post</a>
+    </form>
+</div>
