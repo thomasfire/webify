@@ -13,7 +13,7 @@
                 Available devices: <br>
                 <ul class="devlist">
                 {{#each devices as |dev|}}
-                    <li class="devitem"><a href="dev.name">dev</a></li>
+                    <li class="devitem"><a href="{{dev}}">{{dev}}</a></li>
                 {{/each}}
                 </ul>
             </div>
@@ -26,10 +26,10 @@
         <div class="inforow">
             <div class="infocell">
                 Info: <br>
-                {{#if subpage.err}}
-                    {{subpage.err}}
+                {{#if err}}
+                    {{err}}
                 {{else}}
-                    {{> subpage.template}}
+                    {{{subpage}}}
                 {{/if}}
             </div>
         </div>

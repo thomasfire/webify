@@ -1,12 +1,12 @@
 <div class="post_list_block">
-    <div class="posts_list_counter">{{subpage.post_count}}</div>
-    {{#each subpage.posts as |post|}}
+    <div class="posts_list_counter">{{post_count}}</div>
+    {{#each posts as |post|}}
         <div class="linked_form">
             <form action="/dashboard/blogdev"  method="post" id="postpage_sender{{post.id}}">
                 <div class="command_f">
                     <input type="hidden" name="qtype" value="R" class="qtype">
                     <input type="hidden" name="group" value="blogdev_read" class="group">
-                    <input type="hidden" name="username" value="{{subpage.username}}" class="username">
+                    <input type="hidden" name="username" value="{{../username}}" class="username">
                     <input type="hidden" name="command" value="getpost" class="command">
                     <input type="hidden" name="payload" value="{{post.id}}" class="payload">
                 </div>
@@ -16,13 +16,13 @@
     {{/each}}
 </div>
 
-{{#if subpage.can_post}}
+{{#if can_post}}
     <div class="ln_create_post">
         <form action="/dashboard/blogdev"  method="post" id="postpage_sender">
             <div class="command_f">
                 <input type="hidden" name="qtype" value="W" class="qtype">
                 <input type="hidden" name="group" value="blogdev_write" class="group">
-                <input type="hidden" name="username" value="{{subpage.username}}" class="username">
+                <input type="hidden" name="username" value="{{username}}" class="username">
                 <input type="hidden" name="command" value="showcreatepost" class="command">
                 <input type="hidden" name="payload" value="" class="payload">
             </div>

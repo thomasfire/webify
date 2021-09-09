@@ -52,7 +52,10 @@ impl TemplateCache<'_> {
                     eprintln!("Error in registering the template {}: {:?}", name, err);
                     err_counter += 1;
                 }) {
-                    Ok(_) => continue,
+                    Ok(_) => {
+                        println!("Registered template: `{}`", name);
+                        continue;
+                    },
                     Err(_) => continue,
                 };
             }

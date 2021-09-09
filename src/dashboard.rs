@@ -236,10 +236,13 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
+    let inner_info = get_available_info(&mdata, &user, info.as_str());
+    let inner_template = mdata.templater.render_template(&inner_info.get("template").unwrap_or(&json!("")).as_str().unwrap_or(""), &inner_info);
     match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
                                               "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
-                                              "subpage": get_available_info(&mdata, &user, info.as_str())
+                                              "err": match &inner_template{Ok(_) => "", Err(err) => err},
+                                              "subpage": match &inner_template{Ok(data) => data, Err(_) => ""}
                                             })) {
         Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
         Err(err) => {
@@ -271,13 +274,16 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
         return Ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
     }
 
+    let inner_info = match mdata.dispatch(&user, info.as_str(), form.0) {
+        Ok(d) => d,
+        Err(e) => json!({"err": format!("Error on getting the available info: {}", e)})
+    };
+    let inner_template = mdata.templater.render_template(&inner_info.get("template").unwrap_or(&json!("")).as_str().unwrap_or(""), &inner_info);
     match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
                                               "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
-                                              "subpage": match mdata.dispatch(&user, info.as_str(), form.0) {
-            Ok(d) => d,
-            Err(e) => json!({"err": format!("Error on getting the available info: {}", e)})
-        }
+                                              "err": match &inner_template{Ok(_) => "", Err(err) => err},
+                                              "subpage": match &inner_template{Ok(data) => data, Err(_) => ""}
                                             })) {
         Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
         Err(err) => {
