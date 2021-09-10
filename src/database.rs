@@ -162,7 +162,7 @@ pub fn get_all_groups(pool: &Pool) -> Result<Vec<Groups>, String> {
 }
 
 /// Inserts new user to the database, cookies are not assigned yet
-pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&String>) -> Result<(), String> {
+pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             println!("Got connection");
@@ -172,7 +172,7 @@ pub fn insert_user(pool: &Pool, username: &str, password: &str, groups: Option<&
     };
 
     let gs = match groups {
-        Some(d) => d.as_str(),
+        Some(d) => d,
         None => ""
     };
     let new_user = UserAdd {

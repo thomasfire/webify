@@ -7,12 +7,13 @@ use diesel::{r2d2, SqliteConnection};
 use diesel::r2d2::ConnectionManager;
 use serde_json::Value as jsVal;
 use serde_json::json;
+use serde_json::from_str as js_from_str;
 
 type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 #[derive(Clone)]
 pub struct RootDev {
-    db_pool: Pool
+    db_pool: Pool,
 }
 
 impl RootDev {
@@ -57,18 +58,21 @@ impl RootDev {
     }
 
     fn insert_new_user(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
-        let name = match data.get(0) {
-            Some(d) => d,
+        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
+        let name = match data.get("username") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on inserting users: invalid syntax: couldn't find username"))
         };
 
-        let password = match data.get(1) {
-            Some(d) => d,
+        let password = match data.get("password") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on inserting users: invalid syntax: couldn't find password"))
         };
+        if password.len() < 1 || name.len() < 1 {
+            return Err(format!("Username or password is in wrong format"));
+        }
 
-        let groups = data.get(2);
+        let groups = data.get("groups").map(|data| { data.as_str() }).unwrap_or(None);
         match insert_user(&self.db_pool, name, password, groups) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on inserting user: {}", e))
@@ -76,16 +80,20 @@ impl RootDev {
     }
 
     fn update_user_pass(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
-        let name = match data.get(0) {
-            Some(d) => d,
+        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
+        let name = match data.get("username") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on updating users pass: invalid syntax: couldn't find username"))
         };
 
-        let password = match data.get(1) {
-            Some(d) => d,
+        let password = match data.get("password") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on updating users : invalid syntax: couldn't find password"))
         };
+
+        if password.len() < 1 || name.len() < 1 {
+            return Err(format!("Username or password is in wrong format"));
+        }
 
         match update_user_pass(&self.db_pool, name, password) {
             Ok(_) => Ok("Ok".to_string()),
@@ -94,16 +102,20 @@ impl RootDev {
     }
 
     fn update_user_group(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
-        let name = match data.get(0) {
-            Some(d) => d,
+        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
+        let name = match data.get("username") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on updating users group: invalid syntax: couldn't find username"))
         };
 
-        let groups = match data.get(1) {
-            Some(d) => d,
+        let groups = match data.get("groups") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on updating users group: invalid syntax: couldn't find groups"))
         };
+
+        if groups.len() < 1 || name.len() < 1 {
+            return Err(format!("Username or groups is in wrong format"));
+        }
 
         match update_user_group(&self.db_pool, name, groups) {
             Ok(_) => Ok("Ok".to_string()),
@@ -112,16 +124,20 @@ impl RootDev {
     }
 
     fn insert_new_group(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
-        let group = match data.get(0) {
-            Some(d) => d,
+        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
+        let group = match data.get("group") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on insert_new_group: invalid syntax: couldn't find group"))
         };
 
-        let devices = match data.get(1) {
-            Some(d) => d,
+        let devices = match data.get("devices") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on insert_new_group: invalid syntax: couldn't find devices"))
         };
+
+        if devices.len() < 1 || group.len() < 1 {
+            return Err(format!("devices or group is in wrong format"));
+        }
 
         match insert_group(&self.db_pool, group, devices) {
             Ok(_) => Ok("Ok".to_string()),
@@ -131,16 +147,20 @@ impl RootDev {
 
 
     fn update_group(&self, query: &str) -> Result<String, String> {
-        let data: Vec<String> = query.split("---").map(|x| x.to_string()).collect();
-        let group = match data.get(0) {
-            Some(d) => d,
+        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
+        let group = match data.get("group") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on update_group: invalid syntax: couldn't find group"))
         };
 
-        let devices = match data.get(1) {
-            Some(d) => d,
+        let devices = match data.get("devices") {
+            Some(d) => d.as_str().unwrap_or(""),
             None => return Err(format!("Error on update_group: invalid syntax: couldn't find devices"))
         };
+
+        if devices.len() < 1 || group.len() < 1 {
+            return Err(format!("devices or group is in wrong format"));
+        }
 
         match update_group(&self.db_pool, group, devices) {
             Ok(_) => Ok("Ok".to_string()),
@@ -154,7 +174,7 @@ impl DeviceRead for RootDev {
     fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
         if query.group != "root_read" {
-            return Err("No access".to_string())
+            return Err("No access".to_string());
         }
         match command {
             "read_all_users" => self.read_users(),
@@ -175,7 +195,7 @@ impl DeviceWrite for RootDev {
     fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
         if query.group != "root_write" {
-            return Err("No access".to_string())
+            return Err("No access".to_string());
         }
 
         match command {
@@ -185,11 +205,11 @@ impl DeviceWrite for RootDev {
             "add_group" => self.insert_new_group(query.payload.as_str()),
             "update_group" => self.update_group(query.payload.as_str()),
             _ => Err(format!("Unknown command"))
-        }.map(|mess|{
-             json!({
+        }.map(|mess| {
+            json!({
                 "template": "simple_message.hbs",
                 "message": mess})
-         })
+        })
     }
 }
 

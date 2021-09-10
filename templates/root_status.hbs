@@ -1,21 +1,101 @@
+<script type="text/javascript">
+    function autoset_group() {
+        let query_type = document.getElementById("query_type");
+        let type_val = query_type.options[query_type.selectedIndex].text;
+        let query_group = document.getElementById("query_group");
+        if (type_val === "W") {
+            query_group.setAttribute("value", "root_write");
+        } else if (type_val === "R") {
+            query_group.setAttribute("value", "root_read");
+        } else {
+            query_group.setAttribute("value", "none");
+        }
+        autoset_command_and_payload(type_val);
+    }
+
+    const read_options = [
+        {command: "read_all_users", payload: ""},
+        {command: "read_all_hist", payload: ""},
+        {command: "read_all_groups", payload: ""}
+    ];
+    const write_options = [
+        {
+            command: "add_user",
+            payload: "{\n\"username\": \"USERNAME\",\n\"password\":\"PASSWORD\",\n\"groups\":\"GROUPS\"\n}"
+        },
+        {command: "update_user_password", payload: "{\n\"username\": \"USERNAME\",\n\"password\":\"PASSWORD\"\n}"},
+        {command: "update_user_groups", payload: "{\n\"username\": \"USERNAME\",\n\"groups\":\"GROUPS\"\n}"},
+        {command: "add_group", payload: "{\n\"group\":\"GROUP\",\n\"devices\":\"DEVICES\"\n}"},
+        {command: "update_group", payload: "{\n\"group\":\"GROUP\",\n\"devices\":\"DEVICES\"\n}"}
+    ];
+
+    function autoset_command_and_payload(rw_val) {
+        let opt_to_insert = null;
+        if (rw_val === "R") {
+            opt_to_insert = read_options;
+        } else if (rw_val === "W") {
+            opt_to_insert = write_options;
+        } else {
+            return;
+        }
+        let selection_to_insert = document.getElementById("query_command");
+        selection_to_insert.innerText = null;
+        for (const optToInsertKey in opt_to_insert) {
+            let opt = document.createElement("option");
+            opt.value = opt_to_insert[optToInsertKey]["command"];
+            opt.textContent = opt_to_insert[optToInsertKey]["command"];
+            selection_to_insert.appendChild(opt);
+        }
+        autoset_payload();
+    }
+
+    function autoset_payload() {
+        let query_type = document.getElementById("query_type");
+        let type_val = query_type.options[query_type.selectedIndex].text;
+        let opt_to_insert = null;
+        if (type_val === "R") {
+            opt_to_insert = read_options;
+        } else if (type_val === "W") {
+            opt_to_insert = write_options;
+        } else {
+            return;
+        }
+        let selected_val = document.getElementById("query_command").value;
+        for (const optToInsertKey in opt_to_insert) {
+            if (opt_to_insert[optToInsertKey]["command"] === selected_val) {
+                document.getElementById("query_payload").value = opt_to_insert[optToInsertKey]["payload"];
+                break;
+            }
+        }
+    }
+</script>
+
 <div class="command_form">
-    <form action="/dashboard/root"  method="post" >
+    <form action="/dashboard/root" method="post">
         <div class="command_f">
             QType:<br>
-            <input type="text" name="qtype" value="R" class="qtype">
+            <select name="qtype" class="qtype" onchange="autoset_group();" id="query_type">
+                <option value="R" selected>R</option>
+                <option value="W">W</option>
+            </select>
             <br>
-            Group:<br>
-            <input type="text" name="group" value="root_read" class="group">
+            <input type="hidden" name="group" value="root_read" class="group" id="query_group">
             <input type="hidden" name="username" value="{{username}}" class="username">
             <br>
             Command:<br>
-            <input type="text" name="command" value="" class="command">
+            <select name="command" class="command" onselect="autoset_payload();" id="query_command">
+                <option value="-" selected>-</option>
+            </select>
             <br>
             <br>
             Payload:<br>
-            <input type="text" name="payload" value="" class="payload">
+            <textarea maxlength="256" name="payload" id="query_payload"
+                      style="min-width: 400px;min-height: 200px;"></textarea>
             <br><br>
         </div>
         <input type="submit" value="Send" class="button">
     </form>
 </div>
+<script type="text/javascript">
+    autoset_group();
+</script>
