@@ -2,7 +2,7 @@ extern crate actix_identity;
 extern crate actix_web;
 extern crate actix_form_data;
 
-use crate::database::{get_connection, get_user_devices, get_user_from_cookie, on_init, has_access_to_device, has_access_to_group};
+use crate::database::{Database};
 use crate::root_device::RootDev;
 use crate::device_trait::*;
 use crate::file_device::FileDevice;
@@ -71,12 +71,12 @@ struct Dispatch {
 }
 
 impl Dispatch {
-    pub fn new(conn: Pool, redis_cred: &str, use_scraper: bool) -> Dispatch {
+    pub fn new(database: &Database, redis_cred: &str, use_scraper: bool) -> Dispatch {
         let filer = FileDevice::new();
         Dispatch {
             printer_device: PrinterDevice::new(Arc::new(filer.clone())),
             file_device: filer,
-            root_device: RootDev::new(&conn),
+            root_device: RootDev::new(database),
             blog_device: BlogDevice::new(redis_cred, use_scraper),
         }
     }
@@ -95,9 +95,7 @@ impl Dispatch {
 /// Stores all needed data and dispatcher, and handles all the requests to the devices.
 #[derive(Clone)]
 pub struct DashBoard<'a> {
-    pub mapped_devices: HashMap<String, String>,
-    pub database_url: String,
-    pub connections: Pool,
+    pub database: Database,
     pub templater: TemplateCache<'a>,
     dispatcher: Dispatch,
 }
@@ -105,27 +103,10 @@ pub struct DashBoard<'a> {
 
 impl DashBoard<'_> {
     pub fn new<'a, 'b>(config: &'a Config) -> Result<DashBoard<'b>, String> {
-        let conn: Pool = match get_connection(&config.db_config) {
-            Ok(data) => data,
-            Err(e) => {
-                eprintln!("Error in DashBoard::new at getting the connection: {:?}", e);
-                return Err(format!("Error in DashBoard::new at getting the connection: {:?}", e));
-            }
-        };
-
-        let devices: HashMap<String, String> = match on_init(&conn) {
-            Ok(data) => data,
-            Err(e) => {
-                eprintln!("Error in DashBoard::new at getting the devices: {:?}", e);
-                return Err(format!("Error in DashBoard::new at getting the devices: {:?}", e));
-            }
-        };
-
+        let database = Database::new(config.db_config.as_str(), config.redis_cache.as_str()).unwrap();
         let ds: DashBoard = DashBoard {
-            mapped_devices: devices.clone(),
-            database_url: config.db_config.clone(),
-            connections: conn.clone(),
-            dispatcher: Dispatch::new(conn.clone(), &config.redis_config, config.use_scraper),
+            dispatcher: Dispatch::new(&database, &config.redis_config, config.use_scraper),
+            database: database,
             templater: TemplateCache::new(),
         };
         ds.reload().unwrap();
@@ -133,6 +114,7 @@ impl DashBoard<'_> {
     }
 
     pub fn reload(&self) -> Result<(), String> {
+        self.database.devices_reload()?;
         self.templater.load("templates")
     }
 
@@ -142,7 +124,7 @@ impl DashBoard<'_> {
             return Err(format!("Wrong command credentials"));
         }
 
-        let daccess = match has_access_to_device(&self.connections, &self.mapped_devices, username, device) {
+        let daccess = match self.database.has_access_to_device(username, device) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("Error on dispatching (getting access to dev): {}", e);
@@ -150,7 +132,7 @@ impl DashBoard<'_> {
             }
         };
 
-        let gaccess = match has_access_to_group(&self.connections, username, &query.group) {
+        let gaccess = match self.database.has_access_to_group(username, &query.group) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("Error on dispatching (getting access to group): {}", e);
@@ -181,17 +163,6 @@ impl DashBoard<'_> {
     pub fn get_file_from_filer(&self, username: &str, path: &str) -> Result<Vec<u8>, String> {
         let device = &self.dispatcher.file_device;
         device.get_file(username, path)
-    }
-}
-
-
-fn get_available_devices(pool: &Pool, mapped_devices: &HashMap<String, String>, username: &str) -> Vec<String> {
-    match get_user_devices(pool, mapped_devices, username) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error in get_available_devices: {:?}", e);
-            Vec::new()
-        }
     }
 }
 
@@ -229,7 +200,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
-    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+    let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in dashboard_page at getting the user: {:?}", e);
@@ -240,7 +211,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
     let inner_template = mdata.templater.render_template(&inner_info.get("template").unwrap_or(&json!("")).as_str().unwrap_or(""), &inner_info);
     match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
-                                              "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
+                                              "devices": mdata.database.get_user_devices(&user).unwrap_or(vec![]),
                                               "err": match &inner_template{Ok(_) => "", Err(err) => err},
                                               "subpage": match &inner_template{Ok(data) => data, Err(_) => ""}
                                             })) {
@@ -262,7 +233,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
-    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+    let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in dashboard_page_req at getting the user: {:?}", e);
@@ -281,7 +252,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
     let inner_template = mdata.templater.render_template(&inner_info.get("template").unwrap_or(&json!("")).as_str().unwrap_or(""), &inner_info);
     match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
-                                              "devices": get_available_devices(&mdata.connections, &mdata.mapped_devices, &user),
+                                              "devices": mdata.database.get_user_devices(&user).unwrap_or(vec![]),
                                               "err": match &inner_template{Ok(_) => "", Err(err) => err},
                                               "subpage": match &inner_template{Ok(data) => data, Err(_) => ""}
                                             })) {
@@ -303,7 +274,7 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
-    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+    let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in file_sender at getting the user: {:?}", e);
@@ -340,7 +311,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
     };
 
-    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+    let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in upload_index at getting the user: {:?}", e);
@@ -348,7 +319,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
         }
     };
 
-    let gaccess = match has_access_to_group(&mdata.connections, &user, "filer_write") {
+    let gaccess = match mdata.database.has_access_to_group(&user, "filer_write") {
         Ok(d) => d,
         Err(e) => {
             eprintln!("Error on dispatching (getting access to group): {}", e);
@@ -377,7 +348,7 @@ pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<D
         None => return Err(error::ErrorUnauthorized("Unauthorized")),
     };
 
-    let user = match get_user_from_cookie(&mdata.connections, &cookie) {
+    let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error in uploader at getting the user: {:?}", e);
@@ -385,7 +356,7 @@ pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<D
         }
     };
 
-    let gaccess = match has_access_to_group(&mdata.connections, &user, "filer_write") {
+    let gaccess = match mdata.database.has_access_to_group(&user, "filer_write") {
         Ok(d) => d,
         Err(e) => {
             eprintln!("Error on uploader (getting access to group): {}", e);

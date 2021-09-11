@@ -1,4 +1,4 @@
-use crate::database::{get_all_users, get_all_history, get_all_groups, insert_user, update_user_pass, update_user_group, insert_group, update_group};
+use crate::database::Database;
 use crate::models::LineWebify;
 use crate::dashboard::QCommand;
 use crate::device_trait::*;
@@ -9,20 +9,18 @@ use serde_json::Value as jsVal;
 use serde_json::json;
 use serde_json::from_str as js_from_str;
 
-type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
-
 #[derive(Clone)]
 pub struct RootDev {
-    db_pool: Pool,
+    database: Database,
 }
 
 impl RootDev {
-    pub fn new(db: &Pool) -> RootDev {
-        RootDev { db_pool: db.clone() }
+    pub fn new(db: &Database) -> RootDev {
+        RootDev { database: db.clone() }
     }
 
     fn read_users(&self) -> Result<jsVal, String> {
-        let res = match get_all_users(&self.db_pool) {
+        let res = match self.database.get_all_users() {
             Ok(d) => d,
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
@@ -34,7 +32,7 @@ impl RootDev {
     }
 
     fn read_history(&self) -> Result<jsVal, String> {
-        let res = match get_all_history(&self.db_pool) {
+        let res = match self.database.get_all_history() {
             Ok(d) => d,
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
@@ -46,7 +44,7 @@ impl RootDev {
 
 
     fn read_groups(&self) -> Result<jsVal, String> {
-        let res = match get_all_groups(&self.db_pool) {
+        let res = match self.database.get_all_groups() {
             Ok(d) => d,
             Err(err) => return Err(format!("Error in RootDev.read_users: {}", err))
         };
@@ -73,7 +71,7 @@ impl RootDev {
         }
 
         let groups = data.get("groups").map(|data| { data.as_str() }).unwrap_or(None);
-        match insert_user(&self.db_pool, name, password, groups) {
+        match self.database.insert_user(name, password, groups) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on inserting user: {}", e))
         }
@@ -95,7 +93,7 @@ impl RootDev {
             return Err(format!("Username or password is in wrong format"));
         }
 
-        match update_user_pass(&self.db_pool, name, password) {
+        match self.database.update_user_pass(name, password) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on updating user pass: {}", e))
         }
@@ -117,7 +115,7 @@ impl RootDev {
             return Err(format!("Username or groups is in wrong format"));
         }
 
-        match update_user_group(&self.db_pool, name, groups) {
+        match self.database.update_user_group(name, groups) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on updating user group: {}", e))
         }
@@ -139,7 +137,7 @@ impl RootDev {
             return Err(format!("devices or group is in wrong format"));
         }
 
-        match insert_group(&self.db_pool, group, devices) {
+        match self.database.insert_group(group, devices) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on insert_new_group: {}", e))
         }
@@ -162,7 +160,7 @@ impl RootDev {
             return Err(format!("devices or group is in wrong format"));
         }
 
-        match update_group(&self.db_pool, group, devices) {
+        match self.database.update_group(group, devices) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on update_group: {}", e))
         }

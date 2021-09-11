@@ -20,9 +20,7 @@ table! {
         id -> Integer,
         name -> Text,
         password -> Text,
-        cookie -> Nullable<Text>,
         groups -> Text,
-        wrong_attempts -> Nullable<Integer>,
     }
 }
 

@@ -12,14 +12,12 @@ pub trait LineWebify {
 /// Represents user structure.
 /// User has id, username, password (should be always hashified),  cookie (if does have),
 /// groups user have, and number of wrong attempts he has made.
-#[derive(Queryable, PartialEq, Debug, Identifiable)]
+#[derive(Deserialize, Serialize, Queryable, PartialEq, Debug, Identifiable)]
 pub struct User {
     pub id: i32,
     pub name: String,
     pub password: String,
-    pub cookie: Option<String>,
-    pub groups: String,
-    pub wrong_attempts: Option<i32>,
+    pub groups: String
 }
 
 impl LineWebify for User {
@@ -28,9 +26,7 @@ impl LineWebify for User {
             "id": self.id,
             "name": self.name,
             "password": self.password,
-            "cookie": self.cookie.as_ref().unwrap_or(&"".to_string()),
-            "groups": self.groups,
-            "wrong_attempts": self.wrong_attempts.unwrap_or(0),
+            "groups": self.groups
         })
     }
 }

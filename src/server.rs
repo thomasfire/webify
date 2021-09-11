@@ -14,7 +14,7 @@ use crate::file_cache::FileCache;
 
 use self::actix_web::{Error, http};
 use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader, dashboard_reload_templates};
-use crate::database::{validate_user, get_random_token, assign_cookie, remove_cookie};
+use crate::database::{get_random_token};
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
 
@@ -49,7 +49,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     let nick = form.username.clone();
     let password = form.password.clone();
 
-    let validated = match validate_user(&mdata.connections, &nick, &password) {
+    let validated = match mdata.database.validate_user(&nick, &password) {
         Ok(data) => data,
         Err(e) => {
             eprintln!("Error on handling login: {}", e);
@@ -64,7 +64,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     let token = get_random_token();
     id.remember(token.clone());
 
-    match assign_cookie(&mdata.connections, &nick, &token) {
+    match mdata.database.assign_cookie(&nick, &token) {
         Ok(_) => { println!("New login") }
         Err(e) => {
             eprintln!("Error on assigning cookies: {}", e);
@@ -82,7 +82,7 @@ async fn logout_handler(id: Identity, mdata: web::Data<DashBoard<'_>>) -> Result
 
     id.forget();
 
-    match remove_cookie(&mdata.connections, &cookie) {
+    match mdata.database.remove_cookie(&cookie) {
         Ok(_) => { println!("Logout") }
         Err(e) => {
             eprintln!("Error on removing cookies: {}", e);
