@@ -3,15 +3,18 @@ extern crate r2d2_redis;
 extern crate scraper;
 extern crate reqwest;
 
+use crate::database::get_hash;
+
 use scraper::{Html, Selector};
 use redis::Commands;
 use r2d2_redis::{RedisConnectionManager, r2d2};
+use r2d2_redis::r2d2::PooledConnection;
+use log::{debug, info, error};
+use chrono::Utc;
+
 use std::ops::DerefMut;
 use std::thread;
 use std::time::Duration;
-
-use crate::database::get_hash;
-use self::r2d2_redis::r2d2::PooledConnection;
 
 type RedisPool = r2d2::Pool<RedisConnectionManager>;
 
@@ -86,6 +89,7 @@ fn parse_and_write(curr_conn: &mut PooledConnection<RedisConnectionManager>, lnu
     curr_conn.deref_mut().set(&format!("body_{}", curr_id), &article).map_err(|err| { format!("Redis err: {:?}", err) })?;
     curr_conn.deref_mut().set(&format!("cmmcount_{}", curr_id), 0).map_err(|err| { format!("Redis err: {:?}", err) })?;
     curr_conn.deref_mut().set("ilast_post", curr_id).map_err(|err| { format!("Redis err: {:?}", err) })?;
+    curr_conn.deref_mut().set("ilast_post_time", Utc::now().timestamp()).map_err(|err| { format!("Redis err: {:?}", err) })?;
 
     Ok(())
 }
@@ -100,8 +104,11 @@ fn perform_parsing(conn_pool: &RedisPool) -> Result<u32, String> {
     let mut counter = 0;
     for x in &links {
         match parse_and_write(&mut curr_conn, x) {
-            Ok(_) => counter+=1,
-            Err(err) => { eprintln!("Error occured during parsing `{}`: {}", x, err); continue; }
+            Ok(_) => counter += 1,
+            Err(err) => {
+                error!("Error occured during parsing `{}`: {}", x, err);
+                continue;
+            }
         };
         thread::sleep(Duration::from_secs(2));
     }
@@ -109,10 +116,10 @@ fn perform_parsing(conn_pool: &RedisPool) -> Result<u32, String> {
 }
 
 pub fn run_parsing(conn_pool: RedisPool) {
-    println!("Starting parsing...");
+    debug!("Starting parsing...");
     thread::spawn(move || {
         loop {
-            println!("Result of parsing: {:?}", perform_parsing(&conn_pool));
+            info!("Result of parsing: {:?}", perform_parsing(&conn_pool));
             thread::sleep(Duration::from_secs(1 * 60 * 60));
         }
     });

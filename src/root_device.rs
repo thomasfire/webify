@@ -3,8 +3,6 @@ use crate::models::LineWebify;
 use crate::dashboard::QCommand;
 use crate::device_trait::*;
 
-use diesel::{r2d2, SqliteConnection};
-use diesel::r2d2::ConnectionManager;
 use serde_json::Value as jsVal;
 use serde_json::json;
 use serde_json::from_str as js_from_str;

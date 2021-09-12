@@ -7,6 +7,7 @@ use crate::io_tools::exists;
 
 use serde_json::Value as jsVal;
 use serde_json::json;
+use log::{debug, error};
 
 use std::process::Command;
 use std::fs::{remove_file, remove_dir_all, create_dir_all};
@@ -102,7 +103,7 @@ impl PrinterDevice {
             };
         }
         let filename = format!("{}/{}", self.config.storage, query.payload.split("/").last().unwrap_or("nonamefile"));
-        println!("Cached to: {}", filename);
+        debug!("Cached to: {}", filename);
         match io_tools::write_bytes_to_file(&filename, data) {
             Ok(_) => Ok(filename),
             Err(e) => Err(format!("Error on writing to the cache: {}", e))
@@ -229,7 +230,7 @@ impl DeviceRead for PrinterDevice {
 impl DeviceWrite for PrinterDevice {
     fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         if &query.group != "printer_write" {
-            eprintln!("Wrong permission: {}, expected: printer_write", query.group);
+            error!("Wrong permission: {}, expected: printer_write", query.group);
             return Err("Error: wrong permissions".to_string());
         }
 

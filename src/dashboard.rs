@@ -13,17 +13,14 @@ use crate::template_cache::TemplateCache;
 
 use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error, http};
-use diesel::r2d2::{self, ConnectionManager};
-use diesel::SqliteConnection;
 use futures::StreamExt;
 use serde_json::Value as jsVal;
 use serde_json::json;
 use actix_multipart::Multipart;
+use log::{debug, error, warn, trace};
 
 use std::sync::Arc;
-use std::collections::{HashMap, BTreeMap};
-
-type Pool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
+use std::collections::BTreeMap;
 
 trait Device: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
@@ -77,7 +74,7 @@ impl Dispatch {
             printer_device: PrinterDevice::new(Arc::new(filer.clone())),
             file_device: filer,
             root_device: RootDev::new(database),
-            blog_device: BlogDevice::new(redis_cred, use_scraper),
+            blog_device: BlogDevice::new(redis_cred, database, use_scraper),
         }
     }
 
@@ -127,7 +124,7 @@ impl DashBoard<'_> {
         let daccess = match self.database.has_access_to_device(username, device) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("Error on dispatching (getting access to dev): {}", e);
+                error!("Error on dispatching (getting access to dev): {}", e);
                 return Err("Error on dispatching".to_string());
             }
         };
@@ -135,7 +132,7 @@ impl DashBoard<'_> {
         let gaccess = match self.database.has_access_to_group(username, &query.group) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("Error on dispatching (getting access to group): {}", e);
+                error!("Error on dispatching (getting access to group): {}", e);
                 return Err("Error on dispatching".to_string());
             }
         };
@@ -185,7 +182,7 @@ pub async fn dashboard_reload_templates(mdata: web::Data<DashBoard<'_>>) -> Resu
     match mdata.reload() {
         Ok(_) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("Reloaded")),
         Err(err) => {
-            eprintln!("Error on reload: {}", err);
+            error!("Error on reload: {}", err);
             Ok(HttpResponse::InternalServerError()
                 .content_type("text/html; charset=utf-8")
                 .body("Error occurred during reload. See logs for details"))
@@ -203,7 +200,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error in dashboard_page at getting the user: {:?}", e);
+            warn!("Error in dashboard_page at getting the user: {:?}", e);
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
@@ -217,7 +214,7 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
                                             })) {
         Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
         Err(err) => {
-            eprintln!("Error in rendering dashboard: {}", err);
+            error!("Error in rendering dashboard: {}", err);
             Ok(HttpResponse::InternalServerError()
                 .content_type("text/html; charset=utf-8")
                 .body("Error on rendering the page. Contact your administrator."))
@@ -236,7 +233,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error in dashboard_page_req at getting the user: {:?}", e);
+            error!("Error in dashboard_page_req at getting the user: {:?}", e);
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
@@ -258,7 +255,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
                                             })) {
         Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
         Err(err) => {
-            eprintln!("Error in rendering dashboard: {}", err);
+            error!("Error in rendering dashboard: {}", err);
             Ok(HttpResponse::InternalServerError()
                 .content_type("text/html; charset=utf-8")
                 .body("Error on rendering the page. Contact your administrator."))
@@ -268,7 +265,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
 
 /// Sends needed file to the user after security checks
 pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
-    println!("File transfer");
+    trace!("File transfer");
     let cookie = match id.identity() {
         Some(data) => data,
         None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
@@ -277,7 +274,7 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error in file_sender at getting the user: {:?}", e);
+            error!("Error in file_sender at getting the user: {:?}", e);
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
@@ -285,19 +282,20 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
     let file_data = match mdata.get_file_from_filer(&user, &info.as_str().replace("%2F", "/")) {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Error on getting the file: {}", e);
-            return Ok(HttpResponse::BadRequest().body(format!("<html>
-        <link rel=\"stylesheet\" type=\"text/css\" href=\"/static/lite.css\" media=\"screen\" />\
-        <body>
-            <p class=\"error\">
-        Error on getting the file `{}`: {}
-    </p>
-        </body>
-        </html>", info.as_str(), e)));
+            error!("Error on getting the file: {}", e);
+            match mdata.templater.render_template("sender_error.hbs", &json!({
+                "filename": info.as_str(),
+                "error_msg": e
+            })) {
+                Ok(htmld) => return Ok(HttpResponse::BadRequest().body(htmld)),
+                Err(err) => {
+                    error!("Error on rendering template: {}", err);
+                    return Ok(HttpResponse::InternalServerError().body("Internal error")) }
+            }
         }
     };
 
-    println!("File size: {}", file_data.len());
+    debug!("File size: {}", file_data.len());
     Ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "multipart/form-data")
         .set_header(http::header::CONTENT_LENGTH, file_data.len())
         .set_header(http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", info.as_str().split("%2F").collect::<Vec<&str>>().pop().unwrap_or("some_file")))
@@ -314,7 +312,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error in upload_index at getting the user: {:?}", e);
+            error!("Error in upload_index at getting the user: {:?}", e);
             return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
         }
     };
@@ -322,7 +320,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
     let gaccess = match mdata.database.has_access_to_group(&user, "filer_write") {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Error on dispatching (getting access to group): {}", e);
+            error!("Error on dispatching (getting access to group): {}", e);
             return Ok(HttpResponse::InternalServerError().body("Error on dispatching".to_string()));
         }
     };
@@ -335,7 +333,7 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
     match mdata.templater.render_template("upload.hbs", &context_data) {
         Ok(data) => Ok(HttpResponse::Ok().body(data)),
         Err(err) => {
-            eprintln!("Error in rendering the page: {}", err);
+            error!("Error in rendering the page: {}", err);
             Ok(HttpResponse::InternalServerError().body("Page render error. Contact your administrator"))
         }
     }
@@ -351,7 +349,7 @@ pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<D
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error in uploader at getting the user: {:?}", e);
+            error!("Error in uploader at getting the user: {:?}", e);
             return Err(error::ErrorNotFound("Unauthorized"));
         }
     };
@@ -359,7 +357,7 @@ pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<D
     let gaccess = match mdata.database.has_access_to_group(&user, "filer_write") {
         Ok(d) => d,
         Err(e) => {
-            eprintln!("Error on uploader (getting access to group): {}", e);
+            error!("Error on uploader (getting access to group): {}", e);
             return Err(error::ErrorForbidden("You are not allowed"));
         }
     };

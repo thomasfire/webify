@@ -1,28 +1,29 @@
 extern crate actix_web;
 extern crate actix_form_data;
 
-use std::sync::{Arc, Mutex};
-use std::fs::File;
-use std::io::BufReader;
+use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader, dashboard_reload_templates};
+use crate::database::get_random_token;
+use crate::config::Config;
+use crate::file_cache::FileCache;
 
 use actix_identity::{CookieIdentityPolicy, IdentityService};
 use actix_identity::Identity;
 use actix_web::{App, HttpResponse, HttpServer, middleware, web};
+use log::{debug, error};
 
-use crate::config::Config;
-use crate::file_cache::FileCache;
-
-use self::actix_web::{Error, http};
-use crate::dashboard::{dashboard_page, DashBoard, dashboard_page_req, file_sender, upload_index, uploader, dashboard_reload_templates};
-use crate::database::{get_random_token};
+use actix_web::{Error, http};
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
+
+use std::sync::{Arc, Mutex};
+use std::fs::File;
+use std::io::BufReader;
 
 fn get_static_file(info: &str, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     let static_str = match mdata.get_ref().clone().get_str_file(info) {
         Ok(res) => res,
         Err(err) => {
-            eprintln!("Error on reading static file: {}", err);
+            error!("Error on reading static file: {}", err);
             format!("")
         }
     };
@@ -44,7 +45,7 @@ struct LoginInfo {
 
 /// Handles login requests when LoginInfo has been already sent
 async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard<'_>>, f_cache: web::Data<FileCache>) -> Result<HttpResponse, Error> {
-    println!("login_handler: {:?}", id.identity());
+    debug!("login_handler: {:?}", id.identity());
 
     let nick = form.username.clone();
     let password = form.password.clone();
@@ -52,7 +53,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     let validated = match mdata.database.validate_user(&nick, &password) {
         Ok(data) => data,
         Err(e) => {
-            eprintln!("Error on handling login: {}", e);
+            error!("Error on handling login: {}", e);
             return Ok(HttpResponse::InternalServerError().body(format!("Error on login")));
         }
     };
@@ -65,9 +66,9 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     id.remember(token.clone());
 
     match mdata.database.assign_cookie(&nick, &token) {
-        Ok(_) => { println!("New login") }
+        Ok(_) => { debug!("New login: `{}` -> `{}`", nick, token) }
         Err(e) => {
-            eprintln!("Error on assigning cookies: {}", e);
+            error!("Error on assigning cookies: {}", e);
         }
     };
 
@@ -83,9 +84,9 @@ async fn logout_handler(id: Identity, mdata: web::Data<DashBoard<'_>>) -> Result
     id.forget();
 
     match mdata.database.remove_cookie(&cookie) {
-        Ok(_) => { println!("Logout") }
+        Ok(_) => { debug!("Logout {}", cookie) }
         Err(e) => {
-            eprintln!("Error on removing cookies: {}", e);
+            error!("Error on removing cookies: {}", e);
         }
     };
 
@@ -137,7 +138,6 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
 
     config_tls.set_single_cert(cert_chain, keys.remove(0)).unwrap();
 
-
     HttpServer::new(move || {
         App::new()
             .wrap(IdentityService::new(
@@ -146,7 +146,8 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
                     .secure(false),
             ))
             // enable logger - always register actix-web Logger middleware last
-            .wrap(middleware::Logger::default())
+            .wrap(middleware::Logger::new("%T sec  from %a `%r` -> `%s` %b `%{Referer}i` `%{User-Agent}i`"))
+            .wrap(middleware::Compress::default())
             .data(ds.clone())
             .data(stat_files.clone())
             .service(web::resource("/main").to(main_page))
@@ -166,8 +167,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
                     .route(web::get().to(upload_index))
                     .route(web::post().to(uploader)),
             )
-    }
-    )
+    })
         .bind_rustls(config.bind_address, config_tls)
         .unwrap()
         .run().await.unwrap();

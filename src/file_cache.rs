@@ -1,3 +1,5 @@
+use log::trace;
+
 use std::collections::BTreeMap;
 use std::io::prelude::*;
 use std::fs::File;
@@ -22,7 +24,7 @@ impl FileCache {
         let full_path = format!("static/{}", filename);
         match self.files.read().unwrap().get(&full_path) {
             Some(value) => return Ok(value.clone()),
-            None => println!("Loading `{}` into cache", filename)
+            None => trace!("Loading `{}` into cache", filename)
         };
         let mut file = match File::open(&full_path) {
             Ok(f) => f,

@@ -1,6 +1,6 @@
 use handlebars::Handlebars;
 use serde::Serialize;
-
+use log::{error, trace};
 
 use std::sync::{Arc, RwLock};
 use std::fs::{File, read_dir};
@@ -26,7 +26,7 @@ impl TemplateCache<'_> {
                 let entry_path = match entry {
                     Ok(data) => data,
                     Err(err) => {
-                        eprintln!("Couldn't read file: {:?}", err);
+                        error!("Couldn't read file: {:?}", err);
                         err_counter += 1;
                         continue;
                     }
@@ -37,23 +37,23 @@ impl TemplateCache<'_> {
                     Ok(mut data) => match data.read_to_string(&mut str_buf) {
                         Ok(_) => (),
                         Err(err) => {
-                            eprintln!("Error on reading file: {:?}", err);
+                            error!("Error on reading file: {:?}", err);
                             err_counter += 1;
                             continue;
                         }
                     },
                     Err(err) => {
-                        eprintln!("Couldn't open file: {:?}", err);
+                        error!("Couldn't open file: {:?}", err);
                         continue;
                     }
                 };
                 let name = entry_path.file_name().to_string_lossy().to_string();
                 match handler.register_template_string(&name, str_buf).map_err(|err| {
-                    eprintln!("Error in registering the template {}: {:?}", name, err);
+                    error!("Error in registering the template {}: {:?}", name, err);
                     err_counter += 1;
                 }) {
                     Ok(_) => {
-                        println!("Registered template: `{}`", name);
+                        trace!("Registered template: `{}`", name);
                         continue;
                     },
                     Err(_) => continue,

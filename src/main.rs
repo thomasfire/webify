@@ -2,11 +2,15 @@ extern crate webify;
 
 use webify::server::run_server;
 use webify::config;
+
+use env_logger::Env;
+
 use std::env;
 use std::sync::{Arc, Mutex};
 
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
     let args: Vec<String> = env::args().collect();
     if args.len() > 1 {
         match args[1].as_str() {

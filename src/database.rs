@@ -17,15 +17,13 @@ use diesel::connection::SimpleConnection;
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error as dError;
-use serde_json::Value as jsVal;
-use serde_json::json;
 use serde_json::from_str as js_from_str;
 use serde_json::to_string as js_to_str;
+use log::{debug, error, info, trace, warn};
 
 use std::collections::{HashMap, BTreeSet};
 use std::sync::{RwLock, Arc};
-use std::ops::{Deref, DerefMut};
-use futures::StreamExt;
+use std::ops::DerefMut;
 
 type SQLPool = r2d2::Pool<ConnectionManager<SqliteConnection>>;
 type RedisPool = r2d2_red::Pool<RedisConnectionManager>;
@@ -60,6 +58,11 @@ pub fn get_random_token() -> String {
 
 impl Database {
     pub fn new(sql_conf: &str, redis_conf: &str) -> Result<Self, String> {
+       // env_logger::init();
+        debug!("databse new");
+        warn!("databse new");
+        info!("databse new");
+        trace!("databse new");
         let redis_manager = RedisConnectionManager::new(redis_conf)
             .map_err(|err| { format!("Error on creating redis manager: {:?}", err) })?;
         let redis_pool = RedisPool::builder().build(redis_manager)
@@ -84,12 +87,8 @@ impl Database {
             .map_err(|err| format!("Error on getting the redis connection get_user_groups: {:?}", err))?;
 
         match redis_conn.deref_mut().get::<&str, String>(username) {
-            Ok(data) => match js_from_str::<jsVal>(&data) {
-                Ok(usr_data) => return Ok(usr_data.get("groups")
-                    .unwrap_or(&json!([])).as_array().unwrap_or(&vec![]).iter()
-                    .filter(|group| group.is_string())
-                    .map(|group| group.as_str().unwrap_or("").to_string())
-                    .collect::<Vec<String>>()),
+            Ok(data) => match js_from_str::<User>(&data) {
+                Ok(usr_data) => return Ok(usr_data.groups.split(",").map(|x| x.to_string()).collect()),
                 Err(_) => ()
             },
             Err(_) => ()
@@ -101,15 +100,15 @@ impl Database {
             .first::<User>(&connection) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("Error on getting user devices (get_user_groups): {:?}", e);
+                error!("Error on getting user devices (get_user_groups): {:?}", e);
                 return Err(format!("Error on getting user devices: {:?}", e));
             }
         };
 
-        redis_conn.deref_mut().set::<&str, String, String>(username, js_to_str(&res.get_content()).unwrap_or("".to_string()))
-            .map_err(|err| eprintln!("Error in caching to redis: {:?}", err));
-        redis_conn.deref_mut().expire::<&str, usize>(username, REDIS_USER_EXPIRE)
-            .map_err(|err| eprintln!("Error in setting expire to redis: {:?}", err));
+        let _ = redis_conn.deref_mut().set::<&str, String, String>(username, js_to_str(&res.get_content()).unwrap_or("".to_string()))
+            .map_err(|err| error!("Error in caching to redis: {:?}", err));
+        let _ = redis_conn.deref_mut().expire::<&str, usize>(username, REDIS_USER_EXPIRE)
+            .map_err(|err| error!("Error in setting expire to redis: {:?}", err));
 
         Ok(res.groups.split(",").map(|x| x.to_string()).collect())
     }
@@ -134,7 +133,7 @@ impl Database {
     /// Identifies user with the cookie
     pub fn get_user_from_cookie(&self, cookie: &str) -> Result<String, String> {
         match self.cookie_cache.read()
-            .map_err(|err| format!("Error on reading cookie cache"))?
+            .map_err(|err| format!("Error on reading cookie cache: {:?}", err))?
             .get(cookie) {
             Some(val) => return Ok(val.clone()),
             None => Err("No user for cookie".to_string())
@@ -146,7 +145,7 @@ impl Database {
         let groups = self.get_user_groups(username)?;
 
         let mapped_dev = self.mapped_devices.read()
-            .map_err(|err| format!("Error on reading mapped device cache"))?;
+            .map_err(|err| format!("Error on reading mapped device cache: {:?}", err))?;
 
         Ok(groups.iter().map(|x| mapped_dev.get(x).clone()).filter(|y| match y {
             Some(_) => true,
@@ -158,7 +157,7 @@ impl Database {
     pub fn get_all_users(&self) -> Result<Vec<User>, String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on get_all_users (connection): {:?}", err)),
@@ -176,7 +175,7 @@ impl Database {
     pub fn get_all_history(&self) -> Result<Vec<History>, String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on get_all_history (connection): {:?}", err)),
@@ -195,7 +194,7 @@ impl Database {
     pub fn get_all_groups(&self) -> Result<Vec<Groups>, String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on get_all_groups (connection): {:?}", err)),
@@ -224,7 +223,7 @@ impl Database {
     pub fn update_user_pass(&self, username: &str, password: &str) -> Result<(), String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on update_user_pass (connection): {:?}", err)),
@@ -243,7 +242,7 @@ impl Database {
     pub fn update_user_group(&self, username: &str, group: &str) -> Result<(), String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on update_user_group (connection): {:?}", err)),
@@ -262,7 +261,7 @@ impl Database {
     pub fn update_group(&self, g_name: &str, devices: &str) -> Result<(), String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on update_group (connection): {:?}", err)),
@@ -344,7 +343,7 @@ impl Database {
         if user.is_none() {
             let connection = match self.sql_pool.get() {
                 Ok(conn) => {
-                    println!("Got connection");
+                    debug!("Got connection");
                     conn
                 }
                 Err(err) => return Err(format!("Error on validate_user: {:?}", err)),
@@ -399,7 +398,7 @@ impl Database {
     pub fn devices_reload(&self) -> Result<(), String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
-                println!("Got connection");
+                debug!("Got connection");
                 conn
             }
             Err(err) => return Err(format!("Error on assign cookie (connection): {:?}", err)),
@@ -408,7 +407,7 @@ impl Database {
         let res: Vec<Groups> = match groups::table.load::<Groups>(&connection) {
             Ok(r) => r,
             Err(e) => {
-                eprintln!("Error on getting user devices: {:?}", e);
+                debug!("Error on getting user devices: {:?}", e);
                 return Err(format!("Error on getting user devices: {:?}", e));
             }
         };
@@ -429,7 +428,7 @@ impl Database {
 pub fn insert_group(pool: &SQLPool, group_name: &str, device: &str) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
-            println!("Got connection");
+            debug!("Got connection");
             conn
         }
         Err(err) => return Err(format!("Error on insert_group (connection): {:?}", err)),
@@ -452,7 +451,7 @@ pub fn insert_group(pool: &SQLPool, group_name: &str, device: &str) -> Result<()
 pub fn insert_user(pool: &SQLPool, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
-            println!("Got connection");
+            debug!("Got connection");
             conn
         }
         Err(err) => return Err(format!("Error on insert_user (connection): {:?}", err)),
@@ -502,7 +501,7 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
     let r_pool = get_connection(db_config);
     let pool = match r_pool {
         Ok(conn) => {
-            println!("Connection established");
+            debug!("Connection established");
             conn
         }
         Err(err) => return Err(format!("Error on init_db: {}", err)),
@@ -510,7 +509,7 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
 
     let connection = match pool.get() {
         Ok(conn) => {
-            println!("Got connection");
+            debug!("Got connection");
             conn
         }
         Err(err) => return Err(format!("Error on init_db: {:?}", err)),
@@ -547,7 +546,7 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
     INSERT INTO groups (id, g_name, devices) VALUES (10, 'blogdev_request', 'blogdev');
     INSERT INTO groups (id, g_name, devices) VALUES (11, 'blogdev_read', 'blogdev');
     ") {
-        Ok(_) => println!("DB has been initialized successfully"),
+        Ok(_) => info!("DB has been initialized successfully"),
         Err(err) => return Err(format!("Error on init_db at execution: {:?}", err))
     };
 

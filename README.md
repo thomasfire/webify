@@ -49,8 +49,7 @@ Suggested groups for your basic users: `rstatus,filer_read,printer_read,printer_
 
 After this you can just run the server:
 ```shell script
-$ redis-server --port 6380 --daemonize yes
-$ ./webify
+$ ./run.sh
 ```
 
 If you need additional documentation, you can run:

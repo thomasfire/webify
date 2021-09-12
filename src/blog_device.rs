@@ -5,30 +5,42 @@ use crate::dashboard::QCommand;
 use crate::device_trait::*;
 use crate::news_payload_parser::*;
 use crate::shikimori_scraper::run_parsing;
+use crate::database::Database;
 
 use redis::Commands;
 use r2d2_redis::{RedisConnectionManager, r2d2};
 use serde_json::Value as jsVal;
 use serde_json::json;
 use serde_json::from_str as js_from_str;
+use log::error;
+use chrono::Utc;
 
-use std::ops::DerefMut;
+use std::ops::{DerefMut, Deref};
+use std::sync::{RwLock, Arc};
 
 type RedisPool = r2d2::Pool<RedisConnectionManager>;
 
 #[derive(Clone)]
 pub struct BlogDevice {
     conn_pool: RedisPool,
+    database: Database,
+    cache_list: Arc<RwLock<Vec<jsVal>>>,
+    cache_last_synced: Arc<RwLock<i64>>,
 }
 
 impl BlogDevice {
-    pub fn new(db_config: &str, use_scraper: bool) -> Self {
+    pub fn new(db_config: &str, database: &Database, use_scraper: bool) -> Self {
         let manager = RedisConnectionManager::new(db_config).unwrap(); // I am a Blade Runner
         let pool = RedisPool::builder().build(manager).unwrap();
         if use_scraper {
             run_parsing(pool.clone());
         }
-        BlogDevice { conn_pool: pool }
+        BlogDevice {
+            conn_pool: pool,
+            database: database.clone(),
+            cache_list: Arc::new(RwLock::new(vec![])),
+            cache_last_synced: Arc::new(RwLock::new(0)),
+        }
     }
 
     fn new_post(&self, _username: &str, payload: &str) -> Result<jsVal, String> {
@@ -52,6 +64,13 @@ impl BlogDevice {
             .map_err(|err| { format!("Redis err: {:?}", err) })?;
         curr_conn.deref_mut().set("ilast_post", curr_id).
             map_err(|err| { format!("Redis err: {:?}", err) })?;
+        curr_conn.deref_mut().set("ilast_post_time", Utc::now().timestamp())
+            .map_err(|err| { format!("Redis err: {:?}", err) })?;
+        self.cache_list.write()
+            .map_err(|err| format!("Error on clearing list of posts: {:?}", err))?
+            .clear();
+        *(self.cache_last_synced.write()
+            .map_err(|err| format!("Error on clearing sync timestamp: {:?}", err))?) = 0;
         Ok(json!({
             "template": "simple_message.hbs",
             "message": "OK",
@@ -88,7 +107,7 @@ impl BlogDevice {
                 match js_from_str(&elem) {
                     Ok(data) => data,
                     Err(err) => {
-                        eprintln!("Error in parsing cmm: {:?}", err);
+                        error!("Error in parsing cmm: {:?}", err);
                         json!({})
                     }
                 }
@@ -115,32 +134,47 @@ impl BlogDevice {
 
     fn get_list_of_posts(&self, username: &str) -> Result<jsVal, String> {
         let last_key = "ilast_post";
+        let last_post_time = "ilast_post_time";
 
         let mut curr_conn = match self.conn_pool.get() {
             Ok(val) => val,
             Err(err) => return Err(format!("Error on getting current redis conn: {:?}", err))
         };
 
-        let last_id: u32 = curr_conn.deref_mut().get(last_key).unwrap_or(0) + 1;
-        let mut buffer_v: Vec<jsVal> = vec![];
-        buffer_v.reserve(last_id as usize);
-        for x in 0..last_id {
-            let title: String = curr_conn.deref_mut().get(&format!("title_{}", x)).unwrap_or("".to_string());
-            if title.len() < 5 {
-                continue;
+        let last_real_time: i64 = curr_conn.deref_mut().get(last_post_time).unwrap_or(0) + 1;
+
+        if last_real_time > self.cache_last_synced.read()
+            .map_err(|err| format!("Error on reading sync timestamp: {:?}", err))?.deref().clone() {
+            let last_id: u32 = curr_conn.deref_mut().get(last_key).unwrap_or(0) + 1;
+            let mut buffer_v: Vec<jsVal> = vec![];
+            buffer_v.reserve(last_id as usize);
+            for x in 0..last_id {
+                let title: String = curr_conn.deref_mut().get(&format!("title_{}", x)).unwrap_or("".to_string());
+                if title.len() < 5 {
+                    continue;
+                }
+                buffer_v.push(json!({
+                    "id": x,
+                    "title": title
+                }));
             }
-            buffer_v.push(json!({
-                "id": x,
-                "title": title
-            }));
+            self.cache_list.write()
+                .map_err(|err| format!("Error on copying list of posts: {:?}", err))?
+                .clone_from(&buffer_v);
+
+            *(self.cache_last_synced.write()
+                .map_err(|err| format!("Error on copying list of posts: {:?}", err))?) = Utc::now().timestamp();
         }
+
+        let read_cache = self.cache_list.read()
+            .map_err(|err| format!("Error on reading cached list: {:?}", err))?;
 
         Ok(json!({
             "template": "blog_post_list.hbs",
             "username": username,
-            "post_count": buffer_v.len(),
-            "posts": buffer_v,
-            "can_post": 1 // TODO handle this correctrly on migrating to the redis
+            "post_count": read_cache.len(),
+            "posts": read_cache.clone(),
+            "can_post": self.database.has_access_to_group(username, "blogdev_write")
         }))
     }
 }

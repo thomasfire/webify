@@ -6,6 +6,7 @@ use serde_json::Value as jsVal;
 use serde_json::json;
 use flate2::read::{GzDecoder, GzEncoder};
 use flate2::Compression;
+use log::{debug, info};
 
 use std::fs;
 use std::collections::BTreeMap;
@@ -36,18 +37,17 @@ impl FileDevice {
 
     /// Returns content of the file as vector of bytes
     pub fn get_file(&self, username: &str, payload: &str) -> Result<Vec<u8>, String> {
-        println!("Trying to open the file");
+        debug!("Trying to open the file");
         let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
             return Err("No container was found".to_string());
         }
-        println!("Trying to open the file");
         let mut file = match fs::File::open(&format!("{}/{}", filepath, payload)) {
             Ok(f) => f,
             Err(e) => return Err(format!("Error on opening the file: {:?}", e))
         };
 
-        println!("Start reading the file");
+        debug!("Start reading the file");
         let mut file_data: Vec<u8> = vec![];
         match file.read_to_end(&mut file_data) {
             Ok(_) => {
@@ -55,7 +55,7 @@ impl FileDevice {
                 let mut decompressed: Vec<u8> = vec![];
                 match decoder.read_to_end(&mut decompressed) {
                     Ok(_) => {
-                        println!("Size of decompressed: {}", decompressed.len());
+                        info!("Size of decompressed: {}", decompressed.len());
                         return Ok(decompressed);
                     }
                     Err(e) => return Err(format!("Error on decompressing the file: {}", e)),
@@ -75,15 +75,15 @@ impl FileDevice {
             .map(move |mut x| {
                 match x.get_mut(&filepath) {
                     Some(f) => {
-                        println!("Adding bytes: {}", data.len());
+                        debug!("Adding bytes: {}", data.len());
                         f.data.extend_from_slice(data);
-                        println!("Added bytes: {}; Total: {}", data.len(), f.data.len());
+                        info!("Added bytes: {}; Total: {}", data.len(), f.data.len());
                         return ();
                     }
                     None => {
-                        println!("Initial Adding bytes: {}", data.len());
+                        debug!("Initial Adding bytes: {}", data.len());
                         x.insert(filepath.clone(), BufferedFile { data: data.to_vec() });
-                        println!("Wrote...");
+                        debug!("Wrote...");
                         return ();
                     }
                 };
@@ -113,7 +113,7 @@ impl FileDevice {
         };
 
         let res: Result<Result<(), String>, String> = self.buffered_files.lock().map(move |mut x| {
-            println!("Start writing");
+            debug!("Start writing");
             let bf_data = match x.remove(&format!("{}/{}", filepath, payload)) {
                 Some(f) => f,
                 None => return Err("No data to write".to_string())
@@ -121,7 +121,7 @@ impl FileDevice {
 
 
             let data = &bf_data.data;
-            eprintln!("{}", data.len());
+            info!("Total file len: {}", data.len());
             let mut file_compressed: Vec<u8> = vec![];
             let mut encoder = GzEncoder::new(&data[..], Compression::best());
             match encoder.read_to_end(&mut file_compressed) {
@@ -185,7 +185,7 @@ impl FileDevice {
 
     fn create_dir(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let filepath = format!("{}/{}", &self.storage, username);
-        println!("Create {}/{}", filepath, payload);
+        debug!("Create {}/{}", filepath, payload);
         match fs::create_dir_all(format!("{}/{}", filepath, payload)) {
             Ok(_) => return Ok(match self.get_list(username, payload) {
                 Ok(r) => r,
