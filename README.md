@@ -16,18 +16,26 @@ pub mod web_device;
  * Add new groups for your device into the db via Root device (yeah, that's web panel)
  
  You can see the working example at `src/printer_device.rs`.
- 
+
+### Why Webify?
+
+1. It's quick - most requests are handled less than 10ms
+2. It's modest - release binary is 10 MB after stripping
+3. Small runtime - you can easily deploy it to your Raspberry Pi
+4. Secure in mind - starting from idea
+5. Strong user access rights - easily define, what each user can perform
+
 ### Build and setup
-You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.48).
+You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.54).
 You can easily install it on Manjaro:
 ```shell script
-$ sudo pacman -S rust cargo openssl redis # for building only
-$ sudo pacman -S rust cargo openssl rust-src rust-doc \
+$ sudo pacman -S rust cargo openssl redis sqlite # for building only
+$ sudo pacman -S rust cargo openssl redis sqlite rust-src rust-doc \
   rust-debugger-common rust-lldb rust-gdb rustfmt rust-packaging # for developing
 ```
 
 As Webify works with SQLite as database, make sure you have installed the `libsqlite3-dev` 
-on Debian or `sqlite-devel` on Fedora
+on Debian or `sqlite-devel` on Fedora, `sqlite` on Manjaro. You'll also need `redis` to have caching enabled.
 
 Build on Linux is pretty simple:
 ```shell script
