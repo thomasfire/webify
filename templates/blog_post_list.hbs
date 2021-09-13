@@ -1,3 +1,49 @@
+<style>
+    .linked_form {
+        background: white;
+        width: 50%;
+        min-width: 400px;
+        font-family: sans-serif;
+        font-size: 13pt;
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+        border-radius: 3px;
+        line-height: 30px;
+        margin: 3px;
+    }
+    .linked_form a {
+        display: block;
+        height: 100%;
+        width: 100%;
+    }
+    .linked_form:hover {
+        background: #f4f5ff;
+    }
+    .linked_form:nth-child(even) {
+        background: #f2fff2;
+    }
+    .linked_form:nth-child(even):hover {
+        background: #f2ffff;
+    }
+    .ln_create_post a {
+        display: block;
+        max-width: 200px;
+        height: 40px;
+        line-height: 40px;
+        background: #7FFFD4FF;
+        border-radius: 5px;
+        text-align: center;
+        margin: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+    }
+    .ln_create_post a:hover {
+        box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+    }
+    .ln_create_post a:active {
+        background: rgba(127, 255, 212, 0.1);
+    }
+</style>
+
 <div class="post_list_block">
     <div class="posts_list_counter">{{post_count}}</div>
     {{#each posts as |post|}}

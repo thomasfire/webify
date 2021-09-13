@@ -1,3 +1,44 @@
+<style>
+    .postnewpost a {
+        display: block;
+        max-width: 200px;
+        height: 40px;
+        line-height: 40px;
+        background: #7FFFD4FF;
+        border-radius: 5px;
+        text-align: center;
+        margin: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+    }
+    .postnewpost a:hover {
+        box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+    }
+    .postnewpost a:active {
+        background: rgba(127, 255, 212, 0.1);
+    }
+
+    .postnewpost textarea {
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        border-radius: 5px;
+        width: 50%;
+        min-width: 400px;
+        border: 0;
+        margin: 10px;
+        padding: 0 5px 0 5px;
+        font-family: sans-serif;
+    }
+    #payload_post_title {
+        font-weight: bold;
+        font-size: 16pt;
+        height: 50px;
+        line-height: 50px;
+    }
+    #payload_post_body {
+        height: 500px;
+        padding: 5px;
+    }
+</style>
 <div class="postnewpost">
     <script type="text/javascript">
         function send_post() {
@@ -8,8 +49,8 @@
         }
     </script>
 
-    <textarea name="title" class="payload" id="payload_post_title" form="">Your title here...</textarea>
-    <textarea name="body" class="payload" id="payload_post_body" form="">Your body here...</textarea>
+    <textarea name="title" class="payload" id="payload_post_title" form="" placeholder="Your title here..."></textarea>
+    <textarea name="body" class="payload" id="payload_post_body" form="" placeholder="Your body here..."></textarea>
 
     <form action="/dashboard/blogdev" method="post" id="post_sender">
         <div class="command_f">

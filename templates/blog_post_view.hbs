@@ -1,8 +1,75 @@
+<style>
+    .posttitle, .postbody, .postbottom {
+        font-size: 12pt;
+        font-family: sans-serif;
+        width: 50%;
+        min-width: 400px;
+        margin: 5px;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        padding: 10px;
+    }
+    .postbody img {
+        max-width: 90%;
+        border-radius: 5px;
+    }
+    .posttitle {
+        font-size: 16pt;
+    }
+    .cmmitem {
+        margin: 5px;
+        border-radius: 4px;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.24);
+        width: 90%;
+        display: block;
+        background: white;
+    }
+    .cmmitem:nth-child(even) {
+        background: #fcfcfc;
+    }
+    .cmmauth {
+        font-weight: bold;
+        margin: 3px;
+    }
+    .cmmtime {
+        font-size: 9pt;
+        color: #2b2b2b;
+        margin: 2px;
+    }
+    .cmmtext {
+        margin: 5px;
+        padding: 5px;
+    }
+    .postnewcmm a {
+        display: block;
+        max-width: 200px;
+        height: 40px;
+        line-height: 40px;
+        background: #7FFFD4FF;
+        border-radius: 5px;
+        text-align: center;
+        margin: 10px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+    }
+    .postnewcmm a:hover {
+        box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+    }
+    .postnewcmm a:active {
+        background: rgba(127, 255, 212, 0.1);
+    }
+    .payload_t {
+        border-radius: 5px;
+        border: 0;
+        width: 40%;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.12), 0 2px 4px rgba(0,0,0,0.24);
+    }
+</style>
 <div class="posttitle">{{title}}</div>
 <div class="postbody">{{{body}}}</div>
 <div class="postbottom">
     <div class="cmmblock">
-        <div class="cmmcounter">{{cmmcount}}</div>
+        <div class="cmmcounter">Comments on this topic: {{cmmcount}}</div>
         {{#each cmms as |cmm|}}
             <div class="cmmitem">
                 <div class="cmmauth">
@@ -12,7 +79,7 @@
                     {{cmm.timestamp}}
                 </div>
                 <div class="cmmtext">
-                    {{cmm.text}}
+                    「{{cmm.text}}」
                 </div>
             </div>
         {{/each}}
@@ -27,7 +94,7 @@
         }
     </script>
 
-    <textarea name="payload_t" class="payload_t" id="payload_cmm_new" form="">Your comment here...</textarea>
+    <textarea name="payload_t" class="payload_t" id="payload_cmm_new" form="" placeholder="What do you think?"></textarea>
 
     <form action="/dashboard/blogdev" method="post" id="cmm_sender">
         <div class="command_f">
