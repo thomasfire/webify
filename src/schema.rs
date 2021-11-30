@@ -9,8 +9,11 @@ table! {
 table! {
     history (id) {
         id -> Integer,
-        username -> Nullable<Text>,
-        get_query -> Text,
+        username -> Text,
+        device -> Text,
+        command -> Text,
+        qtype -> Text,
+        rejected -> Integer,
         timestamp -> Timestamp,
     }
 }

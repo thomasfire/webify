@@ -10,6 +10,7 @@ use crate::printer_device::PrinterDevice;
 use crate::blog_device::BlogDevice;
 use crate::config::Config;
 use crate::template_cache::TemplateCache;
+use crate::models::RejectReason;
 
 use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error, http};
@@ -172,10 +173,15 @@ fn get_available_info(dasher: &DashBoard<'_>, username: &str, device: &str) -> j
         payload: "".to_string(),
     };
 
-    match dasher.dispatch(username, device, query) {
-        Ok(d) => d,
-        Err(e) => json!({"err": format!("Error on getting the available info: {}", e)})
-    }
+    let (j_val, reject) = match dasher.dispatch(username, device, query.clone()) {
+        Ok(d) => (d, RejectReason::Ok as i32),
+        Err(e) => (json!({"err": format!("Error on getting the available info: {}", e)}), RejectReason::NoAuth as i32)
+    };
+    match dasher.database.insert_history(username, device, &query.command, &query.qtype, reject) {
+        Ok(_) => (),
+        Err(err) => error!("Error on inserting to the history in get_available_info: {}", err),
+    };
+    j_val
 }
 
 pub async fn dashboard_reload_templates(mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
@@ -242,9 +248,13 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
         return Ok(HttpResponse::BadRequest().body("Bad request: user names doesn't match"));
     }
 
-    let inner_info = match mdata.dispatch(&user, info.as_str(), form.0) {
-        Ok(d) => d,
-        Err(e) => json!({"err": format!("Error on getting the available info: {}", e)})
+    let (inner_info, reject) = match mdata.dispatch(&user, info.as_str(), form.0.clone()) {
+        Ok(d) => (d, RejectReason::Ok as i32) ,
+        Err(e) => (json!({"err": format!("Error on getting the available info: {}", e)}), RejectReason::NoAuth as i32)
+    };
+    match mdata.database.insert_history(&user, info.as_str(), &form.0.command, &form.0.qtype, reject) {
+        Ok(_) => (),
+        Err(err) => error!("Error on inserting to the history: {}", err),
     };
     let inner_template = mdata.templater.render_template(&inner_info.get("template").unwrap_or(&json!("")).as_str().unwrap_or(""), &inner_info);
     match mdata.templater.render_template("dashboard.hbs",

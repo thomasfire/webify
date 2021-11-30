@@ -36,7 +36,7 @@ impl RootDev {
         };
         Ok(json!({
             "template": "root_history_table.hbs",
-            "users": res.iter().map(|x| x.get_content()).collect::<jsVal>()
+            "entries": res.iter().map(|x| x.get_content()).collect::<jsVal>()
         }))
     }
 
@@ -49,7 +49,7 @@ impl RootDev {
 
         Ok(json!({
             "template": "root_groups_table.hbs",
-            "users": res.iter().map(|x| x.get_content()).collect::<jsVal>()
+            "groups": res.iter().map(|x| x.get_content()).collect::<jsVal>()
         }))
     }
 

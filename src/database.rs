@@ -5,7 +5,7 @@ extern crate rand;
 extern crate redis;
 extern crate r2d2_redis;
 
-use crate::models::{Groups, UserAdd, User, History, GroupAdd, LineWebify};
+use crate::models::{Groups, UserAdd, User, History, GroupAdd, LineWebify, HistoryForm};
 use crate::schema::*;
 
 use crypto::digest::Digest;
@@ -217,6 +217,26 @@ impl Database {
     /// Inserts new group to the databse
     pub fn insert_group(&self, group_name: &str, device: &str) -> Result<(), String> {
         insert_group(&self.sql_pool, group_name, device)
+    }
+
+    /// Inserts new group to the databse
+    pub fn insert_history(&self, username: &str, device: &str, command: &str, qtype: &str, rejected: i32) -> Result<(), String> {
+        let connection = match self.sql_pool.get() {
+            Ok(conn) => {
+                debug!("Got connection");
+                conn
+            }
+            Err(err) => return Err(format!("Error on insert_history (connection): {:?}", err)),
+        };
+
+        let entry = HistoryForm {username, device, command, qtype, rejected};
+
+        match diesel::insert_into(history::table)
+            .values(entry)
+            .execute(&connection) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!("Error on update_user_pass (update): {:?}", err))
+        }
     }
 
     /// Updates password for the user to the databse
@@ -525,9 +545,11 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
     );
     CREATE TABLE history (
         id INTEGER primary key not null,
-        username TEXT null,
-        get_query TEXT not null,
-        timestamp TIMESTAMP not null
+        username TEXT not null,
+        device TEXT not null,
+        command TEXT not null,
+        rejected INTEGER not null DEFAULT 0,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
     CREATE TABLE groups (
         id INTEGER primary key not null,
