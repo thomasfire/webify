@@ -91,30 +91,3 @@ pub struct HistoryForm<'a> {
     pub qtype: &'a str,
     pub rejected: i32,
 }
-
-/// Groups is the structure, that matches group name with the device it has
-#[derive(Queryable, PartialEq, Debug)]
-pub struct Groups {
-    pub id: i32,
-    pub g_name: String,
-    pub devices: String,
-}
-
-
-impl LineWebify for Groups {
-    fn get_content(&self) -> jsVal {
-        json!({
-            "id": self.id,
-            "g_name": self.g_name,
-            "devices": self.devices
-        })
-    }
-}
-
-
-#[derive(Deserialize, Insertable)]
-#[table_name = "groups"]
-pub struct GroupAdd<'a> {
-    pub g_name: &'a str,
-    pub devices: &'a str,
-}

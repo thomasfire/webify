@@ -13,7 +13,7 @@ pub mod web_device;
  * Add your device name into the `src/dashboard.rs` into the function `Dispatch::resolve_by_name` 
  and add initializer into `Dispatch::new`
  * Add new web services in the `src/server.rs`, if you want to receive specific data (not necessary)
- * Add new groups for your device into the db via Root device (yeah, that's web panel)
+ * Add new groups for your device into `src/device.rs` `enum Devices`, `DEV_NAMES` and `DEV_GROUPS`
  
  You can see the working example at `src/printer_device.rs`.
 

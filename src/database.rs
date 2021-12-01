@@ -5,8 +5,9 @@ extern crate rand;
 extern crate redis;
 extern crate r2d2_redis;
 
-use crate::models::{Groups, UserAdd, User, History, GroupAdd, LineWebify, HistoryForm};
+use crate::models::{UserAdd, User, History, LineWebify, HistoryForm};
 use crate::schema::*;
+use crate::devices;
 
 use crypto::digest::Digest;
 use crypto::sha2::Sha256;
@@ -19,9 +20,10 @@ use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error as dError;
 use serde_json::from_str as js_from_str;
 use serde_json::to_string as js_to_str;
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, info};
 
 use std::collections::{HashMap, BTreeSet};
+use std::collections::btree_map::BTreeMap;
 use std::sync::{RwLock, Arc};
 use std::ops::DerefMut;
 
@@ -58,11 +60,6 @@ pub fn get_random_token() -> String {
 
 impl Database {
     pub fn new(sql_conf: &str, redis_conf: &str) -> Result<Self, String> {
-       // env_logger::init();
-        debug!("databse new");
-        warn!("databse new");
-        info!("databse new");
-        trace!("databse new");
         let redis_manager = RedisConnectionManager::new(redis_conf)
             .map_err(|err| { format!("Error on creating redis manager: {:?}", err) })?;
         let redis_pool = RedisPool::builder().build(redis_manager)
@@ -148,7 +145,7 @@ impl Database {
             .map_err(|err| format!("Error on reading mapped device cache: {:?}", err))?;
 
         Ok(groups.iter().map(|x| mapped_dev.get(x).clone()).filter(|y| match y {
-            Some(_) => true,
+            Some(val) => if val.is_empty() { false } else { true },
             None => false,
         }).map(|x| x.unwrap_or(&"".to_string()).to_string()).collect::<BTreeSet<String>>().iter().cloned().collect::<Vec<String>>())
     }
@@ -191,32 +188,15 @@ impl Database {
     }
 
     /// Returns vector of all groups as they are represented in the database
-    pub fn get_all_groups(&self) -> Result<Vec<Groups>, String> {
-        let connection = match self.sql_pool.get() {
-            Ok(conn) => {
-                debug!("Got connection");
-                conn
-            }
-            Err(err) => return Err(format!("Error on get_all_groups (connection): {:?}", err)),
-        };
-
-
-        let group: Vec<Groups> = match groups::table.load::<Groups>(&connection) {
-            Ok(d) => d,
-            Err(e) => return Err(format!("Error on loading groups: {:?}", e)),
-        };
-
-        Ok(group)
+    pub fn get_all_groups(&self) -> Result<BTreeMap<String, String>, String> {
+        Ok(self.mapped_devices.read()
+            .map_err(|err| format!("Error on reading mapped device cache: {:?}", err))?
+            .iter().map(|(x, y)| (x.clone(), y.clone())).collect::<BTreeMap<String, String>>())
     }
 
     /// Inserts new user to the database, cookies are not assigned yet
     pub fn insert_user(&self, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
         insert_user(&self.sql_pool, username, password, groups)
-    }
-
-    /// Inserts new group to the databse
-    pub fn insert_group(&self, group_name: &str, device: &str) -> Result<(), String> {
-        insert_group(&self.sql_pool, group_name, device)
     }
 
     /// Inserts new group to the databse
@@ -274,24 +254,6 @@ impl Database {
             .execute(&connection) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error on update_user_group (update): {:?}", err))
-        }
-    }
-
-    /// Writes device for the group to the database
-    pub fn update_group(&self, g_name: &str, devices: &str) -> Result<(), String> {
-        let connection = match self.sql_pool.get() {
-            Ok(conn) => {
-                debug!("Got connection");
-                conn
-            }
-            Err(err) => return Err(format!("Error on update_group (connection): {:?}", err)),
-        };
-
-        match diesel::update(groups::table.filter(groups::columns::g_name.eq(g_name)))
-            .set(groups::columns::devices.eq(devices))
-            .execute(&connection) {
-            Ok(_) => self.devices_reload(),
-            Err(err) => Err(format!("Error on update_group (update): {:?}", err))
         }
     }
 
@@ -416,54 +378,17 @@ impl Database {
     /// assert_eq!(device_by_group.get("filer_read"), "filer");
     /// ```
     pub fn devices_reload(&self) -> Result<(), String> {
-        let connection = match self.sql_pool.get() {
-            Ok(conn) => {
-                debug!("Got connection");
-                conn
-            }
-            Err(err) => return Err(format!("Error on assign cookie (connection): {:?}", err)),
-        };
-
-        let res: Vec<Groups> = match groups::table.load::<Groups>(&connection) {
-            Ok(r) => r,
-            Err(e) => {
-                debug!("Error on getting user devices: {:?}", e);
-                return Err(format!("Error on getting user devices: {:?}", e));
-            }
-        };
-
-        {
-            let mut devices_map = self.mapped_devices.write()
-                .map_err(|err| format!("Error on writing mapped device: {:?}", err))?;
-            for g_buff in &res {
-                devices_map.insert(g_buff.g_name.clone(), g_buff.devices.clone());
+        let mut devices_map = self.mapped_devices.write()
+            .map_err(|err| format!("Error on writing mapped device: {:?}", err))?;
+        for dev_i in 0..devices::DEVICES_LEN {
+            for group_name_o in devices::DEV_GROUPS[dev_i] {
+                match group_name_o {
+                    Some(group_name) => devices_map.insert(group_name.to_string(), devices::DEV_NAMES[dev_i].to_string()),
+                    None => continue,
+                };
             }
         }
-
         Ok(())
-    }
-}
-
-
-pub fn insert_group(pool: &SQLPool, group_name: &str, device: &str) -> Result<(), String> {
-    let connection = match pool.get() {
-        Ok(conn) => {
-            debug!("Got connection");
-            conn
-        }
-        Err(err) => return Err(format!("Error on insert_group (connection): {:?}", err)),
-    };
-
-    let new_group = GroupAdd {
-        g_name: group_name,
-        devices: device,
-    };
-
-    match diesel::insert_into(groups::table)
-        .values(&new_group)
-        .execute(&connection) {
-        Ok(_) => Ok(()),
-        Err(err) => Err(format!("Error on inserting groups (insert): {:?}", err))
     }
 }
 
@@ -548,25 +473,10 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
         username TEXT not null,
         device TEXT not null,
         command TEXT not null,
+        qtype TEXT not null,
         rejected INTEGER not null DEFAULT 0,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
-    CREATE TABLE groups (
-        id INTEGER primary key not null,
-        g_name TEXT not null,
-        devices TEXT not null
-    );
-    INSERT INTO groups (id, g_name, devices) VALUES (1, 'filer_read', 'filer');
-    INSERT INTO groups (id, g_name, devices) VALUES (2, 'filer_write', 'filer');
-    INSERT INTO groups (id, g_name, devices) VALUES (3, 'root_write', 'root');
-    INSERT INTO groups (id, g_name, devices) VALUES (4, 'root_read', 'root');
-    INSERT INTO groups (id, g_name, devices) VALUES (5, 'printer_read', 'printer');
-    INSERT INTO groups (id, g_name, devices) VALUES (6, 'printer_write', 'printer');
-    INSERT INTO groups (id, g_name, devices) VALUES (7, 'printer_request', 'printer');
-    INSERT INTO groups (id, g_name, devices) VALUES (8, 'printer_confirm', 'printer');
-    INSERT INTO groups (id, g_name, devices) VALUES (9, 'blogdev_write', 'blogdev');
-    INSERT INTO groups (id, g_name, devices) VALUES (10, 'blogdev_request', 'blogdev');
-    INSERT INTO groups (id, g_name, devices) VALUES (11, 'blogdev_read', 'blogdev');
     ") {
         Ok(_) => info!("DB has been initialized successfully"),
         Err(err) => return Err(format!("Error on init_db at execution: {:?}", err))

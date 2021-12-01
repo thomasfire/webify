@@ -16,14 +16,11 @@ fn main() {
         match args[1].as_str() {
             "--setup" => {
                 config::setup();
+                config::add_root_user();
                 return;
             }
             "--uadd" => {
                 config::add_user();
-                return;
-            }
-            "--gadd" => {
-                config::add_group();
                 return;
             }
             _ => {

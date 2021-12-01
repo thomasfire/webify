@@ -1,14 +1,11 @@
 extern crate toml;
 
 use crate::io_tools;
-use crate::database::{init_db, insert_group};
-use crate::database::get_connection;
-use crate::database::insert_user;
+use crate::database::{init_db, get_connection, insert_user};
+use crate::printer_device::{PrinterDevice, PRINTER_CONFIG_PATH, PrinterConfig};
+use crate::devices::list_all_groups;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
-use crate::printer_device::PrinterDevice;
-use crate::printer_device::PRINTER_CONFIG_PATH;
-use crate::printer_device::PrinterConfig;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -91,8 +88,8 @@ pub fn write_config<T: Serialize + DeserializeOwned + Clone>(config: T, conf_pat
 pub fn setup() {
     let bind_address = io_tools::read_std_line("Enter address to bind on: ");
     let db_config = io_tools::read_std_line("Enter sqlite path: ");
-    let redis_config = io_tools::read_std_line("Enter redis URL (eg redis://127.0.0.1:6379/): ");
-    let redis_cache = io_tools::read_std_line("Enter redis URL (eg redis://127.0.0.1:6380/): ");
+    let redis_config = io_tools::read_std_line("Enter redis config URL (eg redis://127.0.0.1:6379/): ");
+    let redis_cache = io_tools::read_std_line("Enter redis cache URL (eg redis://127.0.0.1:6380/): ");
     let use_scraper = io_tools::read_std_line("Use scraper to fetch news from external resources? (true/false) ").parse::<bool>().unwrap();
 
     println!("\nHere is your printers:\n{}\n", PrinterDevice::get_printers());
@@ -125,6 +122,35 @@ pub fn setup() {
 }
 
 
+pub fn add_root_user() {
+    let username = io_tools::read_std_line("Enter root username: ");
+    let password = io_tools::read_std_line("Enter root password: ");
+
+    let conf = match read_config::<Config>(DEFAULT_CONFIG_PATH) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on reading config: {}", e);
+            return;
+        }
+    };
+
+    let conn = match get_connection(&conf.db_config) {
+        Ok(data) => data,
+        Err(e) => {
+            eprintln!("Error on connecting to db: {}", e);
+            return;
+        }
+    };
+
+    match insert_user(&conn, &username, &password, Some(&list_all_groups().join(","))) {
+        Ok(_) => println!("User was added successfully"),
+        Err(e) => {
+            eprintln!("Error on adding user to db: {}", e);
+            return;
+        }
+    }
+}
+
 /// Adds user to the previously configured database
 pub fn add_user() {
     let username = io_tools::read_std_line("Enter new username: ");
@@ -151,37 +177,6 @@ pub fn add_user() {
         Ok(_) => println!("User was added successfully"),
         Err(e) => {
             eprintln!("Error on adding user to db: {}", e);
-            return;
-        }
-    }
-}
-
-
-/// Adds group to the previously configured database
-pub fn add_group() {
-    let g_name = io_tools::read_std_line("Enter new group name: ");
-    let devices = io_tools::read_std_line("Enter devices, separated by comma: ");
-
-    let conf = match read_config::<Config>(DEFAULT_CONFIG_PATH) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error on reading config: {}", e);
-            return;
-        }
-    };
-
-    let conn = match get_connection(&conf.db_config) {
-        Ok(data) => data,
-        Err(e) => {
-            eprintln!("Error on connecting to db: {}", e);
-            return;
-        }
-    };
-
-    match insert_group(&conn, &g_name, &devices) {
-        Ok(_) => println!("Group was added successfully"),
-        Err(e) => {
-            eprintln!("Error on adding group to db: {}", e);
             return;
         }
     }

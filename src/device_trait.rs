@@ -25,4 +25,3 @@ pub trait DeviceConfirm {
     fn confirm_query(&self, query: &QCommand) -> Result<jsVal, String>;
     fn dismiss_query(&self, query: &QCommand) -> Result<jsVal, String>;
 }
-

@@ -2,13 +2,16 @@
     <tr>
         <th>id</th>
         <th>username</th>
-        <th>query</th>
+        <th>qtype</th>
+        <th>device</th>
+        <th>command</th>
         <th>timestamp</th>
     </tr>
     {{#each entries as |entry|}}
     <tr>
         <td>{{entry.id}}</td>
         <td>{{entry.username}}</td>
+        <td>{{entry.qtype}}</td>
         <td>{{entry.device}}</td>
         <td>{{entry.command}}</td>
         <td>{{entry.timestamp}}</td>

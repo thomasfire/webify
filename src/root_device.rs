@@ -49,7 +49,9 @@ impl RootDev {
 
         Ok(json!({
             "template": "root_groups_table.hbs",
-            "groups": res.iter().map(|x| x.get_content()).collect::<jsVal>()
+            "groups": res.iter().map(|(group, device)| {
+                json!({"g_name": group, "devices": device})
+            }).collect::<jsVal>()
         }))
     }
 
@@ -118,51 +120,6 @@ impl RootDev {
             Err(e) => Err(format!("Error on updating user group: {}", e))
         }
     }
-
-    fn insert_new_group(&self, query: &str) -> Result<String, String> {
-        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
-        let group = match data.get("group") {
-            Some(d) => d.as_str().unwrap_or(""),
-            None => return Err(format!("Error on insert_new_group: invalid syntax: couldn't find group"))
-        };
-
-        let devices = match data.get("devices") {
-            Some(d) => d.as_str().unwrap_or(""),
-            None => return Err(format!("Error on insert_new_group: invalid syntax: couldn't find devices"))
-        };
-
-        if devices.len() < 1 || group.len() < 1 {
-            return Err(format!("devices or group is in wrong format"));
-        }
-
-        match self.database.insert_group(group, devices) {
-            Ok(_) => Ok("Ok".to_string()),
-            Err(e) => Err(format!("Error on insert_new_group: {}", e))
-        }
-    }
-
-
-    fn update_group(&self, query: &str) -> Result<String, String> {
-        let data: jsVal = js_from_str(query).map_err(|err| { format!("Couldn't parse JSON: {:?}", err) })?;
-        let group = match data.get("group") {
-            Some(d) => d.as_str().unwrap_or(""),
-            None => return Err(format!("Error on update_group: invalid syntax: couldn't find group"))
-        };
-
-        let devices = match data.get("devices") {
-            Some(d) => d.as_str().unwrap_or(""),
-            None => return Err(format!("Error on update_group: invalid syntax: couldn't find devices"))
-        };
-
-        if devices.len() < 1 || group.len() < 1 {
-            return Err(format!("devices or group is in wrong format"));
-        }
-
-        match self.database.update_group(group, devices) {
-            Ok(_) => Ok("Ok".to_string()),
-            Err(e) => Err(format!("Error on update_group: {}", e))
-        }
-    }
 }
 
 
@@ -198,8 +155,6 @@ impl DeviceWrite for RootDev {
             "add_user" => self.insert_new_user(query.payload.as_str()),
             "update_user_password" => self.update_user_pass(query.payload.as_str()),
             "update_user_groups" => self.update_user_group(query.payload.as_str()),
-            "add_group" => self.insert_new_group(query.payload.as_str()),
-            "update_group" => self.update_group(query.payload.as_str()),
             _ => Err(format!("Unknown command"))
         }.map(|mess| {
             json!({

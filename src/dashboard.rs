@@ -184,6 +184,7 @@ fn get_available_info(dasher: &DashBoard<'_>, username: &str, device: &str) -> j
     j_val
 }
 
+#[cfg(debug_assertions)]
 pub async fn dashboard_reload_templates(mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
     match mdata.reload() {
         Ok(_) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body("Reloaded")),
@@ -194,6 +195,13 @@ pub async fn dashboard_reload_templates(mdata: web::Data<DashBoard<'_>>) -> Resu
                 .body("Error occurred during reload. See logs for details"))
         }
     }
+}
+
+#[cfg(not(debug_assertions))]
+pub async fn dashboard_reload_templates(_mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
+    Ok(HttpResponse::BadRequest()
+        .content_type("text/html; charset=utf-8")
+        .body("Not such feature"))
 }
 
 /// Handles empty request to the dashboard
