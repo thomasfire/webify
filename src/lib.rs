@@ -18,6 +18,7 @@ pub mod printer_device;
 pub mod file_cache;
 pub mod blog_device;
 pub mod stat_device;
+pub mod stat_service;
 pub mod news_payload_parser;
 pub mod shikimori_scraper;
 pub mod template_cache;

@@ -1,3 +1,6 @@
+use std::convert::TryFrom;
+
+#[derive(Clone)]
 pub enum Devices {
     Zero = 0,
     Filer = 1,
@@ -21,6 +24,15 @@ pub enum Groups {
 pub const GROUP_LEN: usize = Groups::LEN as usize;
 pub const DEVICES_LEN: usize = Devices::LEN as usize;
 
+const DEVICE_ARRAY: [Devices; DEVICES_LEN] = [
+    Devices::Zero,
+    Devices::Filer,
+    Devices::Root,
+    Devices::Printer,
+    Devices::Blog,
+    Devices::Stat
+];
+
 
 pub const DEV_NAMES: [&'static str; DEVICES_LEN] = [
     "",
@@ -38,7 +50,7 @@ pub const DEV_GROUPS: [[Option<&'static str>; GROUP_LEN]; DEVICES_LEN] = [
     [None, Some("root_read"), Some("root_write"), None, None, None], // Root device
     [None, Some("printer_read"), Some("printer_write"), Some("printer_request"), Some("printer_confirm"), Some("printer_confirm")], // Printer device
     [None, Some("blogdev_read"), Some("blogdev_write"), Some("blogdev_request"), None, None], // Blog device
-    [None, None, None, None, None, None], // Stat device
+    [None, Some("statdev_read"), None, None, None, None], // Stat device
 ];
 
 pub fn list_all_groups() -> Vec<String> {
@@ -54,3 +66,14 @@ pub fn list_all_groups() -> Vec<String> {
     buffer
 }
 
+impl TryFrom<usize> for Devices {
+    type Error = ();
+
+    fn try_from(v: usize) -> Result<Self, Self::Error> {
+        if v >= 0 && v < DEVICES_LEN {
+            Ok(DEVICE_ARRAY[v].clone())
+        } else {
+            Err(())
+        }
+    }
+}

@@ -13,7 +13,9 @@ pub struct Config {
     pub bind_address: String,
     pub redis_config: String,
     pub redis_cache: String,
-    pub use_scraper: bool
+    pub use_scraper: bool,
+    pub general_stat_period_s: u32,
+    pub cross_user_stat_period_s: u32,
 }
 
 pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
@@ -91,6 +93,8 @@ pub fn setup() {
     let redis_config = io_tools::read_std_line("Enter redis config URL (eg redis://127.0.0.1:6379/): ");
     let redis_cache = io_tools::read_std_line("Enter redis cache URL (eg redis://127.0.0.1:6380/): ");
     let use_scraper = io_tools::read_std_line("Use scraper to fetch news from external resources? (true/false) ").parse::<bool>().unwrap();
+    let general_stat_period = io_tools::read_std_line("General stats period in seconds (0 to disable): ").parse::<u32>().unwrap();
+    let cross_user_stat_period = io_tools::read_std_line("Per user stats period in seconds (0 to disable): ").parse::<u32>().unwrap();
 
     println!("\nHere is your printers:\n{}\n", PrinterDevice::get_printers());
     let m_printer = io_tools::read_std_line("Enter name of the printer: ");
@@ -101,6 +105,8 @@ pub fn setup() {
         bind_address: bind_address.clone(),
         redis_config: redis_config.clone(),
         redis_cache: redis_cache.clone(),
+        general_stat_period_s: general_stat_period,
+        cross_user_stat_period_s: cross_user_stat_period,
         use_scraper
     }, DEFAULT_CONFIG_PATH) {
         Ok(_) => println!("Ok"),

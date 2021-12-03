@@ -10,7 +10,6 @@ use actix_identity::{CookieIdentityPolicy, IdentityService};
 use actix_identity::Identity;
 use actix_web::{App, HttpResponse, HttpServer, middleware, web};
 use log::{debug, error};
-
 use actix_web::{Error, http};
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};

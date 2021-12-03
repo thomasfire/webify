@@ -1,8 +1,8 @@
+use crate::schema::*;
+
 use chrono::NaiveDateTime;
 use serde_json::Value as jsVal;
 use serde_json::json;
-
-use crate::schema::*;
 
 #[derive(Copy, Clone)]
 pub enum RejectReason {

@@ -2,10 +2,9 @@ use crate::database::Database;
 use crate::models::LineWebify;
 use crate::dashboard::QCommand;
 use crate::device_trait::*;
+use crate::devices::{Devices, Groups, DEV_GROUPS};
 
-use serde_json::Value as jsVal;
-use serde_json::json;
-use serde_json::from_str as js_from_str;
+use serde_json::{Value as jsVal, json, from_str as js_from_str};
 
 #[derive(Clone)]
 pub struct RootDev {
@@ -126,7 +125,7 @@ impl RootDev {
 impl DeviceRead for RootDev {
     fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
-        if query.group != "root_read" {
+        if query.group != DEV_GROUPS[Devices::Root as usize][Groups::Read as usize].unwrap() {
             return Err("No access".to_string());
         }
         match command {
@@ -147,7 +146,7 @@ impl DeviceRead for RootDev {
 impl DeviceWrite for RootDev {
     fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
-        if query.group != "root_write" {
+        if query.group != DEV_GROUPS[Devices::Root as usize][Groups::Write as usize].unwrap() {
             return Err("No access".to_string());
         }
 

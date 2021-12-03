@@ -11,6 +11,8 @@ use crate::blog_device::BlogDevice;
 use crate::config::Config;
 use crate::template_cache::TemplateCache;
 use crate::models::RejectReason;
+use crate::stat_device::StatDevice;
+use crate::devices;
 
 use actix_identity::Identity;
 use actix_web::{Error, HttpResponse, web, error, http};
@@ -22,6 +24,7 @@ use log::{debug, error, warn, trace};
 
 use std::sync::Arc;
 use std::collections::BTreeMap;
+use std::convert::TryInto;
 
 trait Device: DeviceRead + DeviceWrite + DeviceConfirm + DeviceRequest {}
 
@@ -66,25 +69,33 @@ struct Dispatch {
     root_device: RootDev,
     printer_device: PrinterDevice,
     blog_device: BlogDevice,
+    stat_device: StatDevice,
 }
 
 impl Dispatch {
-    pub fn new(database: &Database, redis_cred: &str, use_scraper: bool) -> Dispatch {
+    pub fn new(database: &Database, redis_cred: &str, config: &Config) -> Dispatch {
         let filer = FileDevice::new();
         Dispatch {
             printer_device: PrinterDevice::new(Arc::new(filer.clone())),
             file_device: filer,
             root_device: RootDev::new(database),
-            blog_device: BlogDevice::new(redis_cred, database, use_scraper),
+            blog_device: BlogDevice::new(&config.redis_config, database, config.use_scraper),
+            stat_device: StatDevice::new(database, config)
         }
     }
 
     pub fn resolve_by_name(&self, devname: &str) -> Result<&dyn Device, String> {
-        match devname {
-            "filer" => Ok(&self.file_device),
-            "root" => Ok(&self.root_device),
-            "printer" => Ok(&self.printer_device),
-            "blogdev" => Ok(&self.blog_device),
+        let index = match devices::DEV_NAMES.iter().position(|x| x == &devname) {
+            Some(v) => v,
+            None => return Err("No such device".to_string())
+        };
+
+        match index.try_into() {
+            Ok(devices::Devices::Filer) => Ok(&self.file_device),
+            Ok(devices::Devices::Printer) => Ok(&self.printer_device),
+            Ok(devices::Devices::Root) => Ok(&self.root_device),
+            Ok(devices::Devices::Blog) => Ok(&self.blog_device),
+            Ok(devices::Devices::Stat) => Ok(&self.stat_device),
             _ => Err("No such device".to_string())
         }
     }
@@ -103,7 +114,7 @@ impl DashBoard<'_> {
     pub fn new<'a, 'b>(config: &'a Config) -> Result<DashBoard<'b>, String> {
         let database = Database::new(config.db_config.as_str(), config.redis_cache.as_str()).unwrap();
         let ds: DashBoard = DashBoard {
-            dispatcher: Dispatch::new(&database, &config.redis_config, config.use_scraper),
+            dispatcher: Dispatch::new(&database, &config.redis_config, &config),
             database: database,
             templater: TemplateCache::new(),
         };

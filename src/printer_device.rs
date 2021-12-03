@@ -4,6 +4,7 @@ use crate::config;
 use crate::file_device::FileDevice;
 use crate::io_tools;
 use crate::io_tools::exists;
+use crate::devices::{Devices, Groups, DEV_GROUPS};
 
 use serde_json::Value as jsVal;
 use serde_json::json;
@@ -197,7 +198,7 @@ impl PrinterDevice {
 
 impl DeviceRead for PrinterDevice {
     fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
-        if &query.group != "printer_read" {
+        if &query.group != DEV_GROUPS[Devices::Printer as usize][Groups::Read as usize].unwrap() {
             return Err("Error: wrong permission".to_string());
         }
         match query.command.as_str() {
@@ -229,7 +230,7 @@ impl DeviceRead for PrinterDevice {
 
 impl DeviceWrite for PrinterDevice {
     fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
-        if &query.group != "printer_write" {
+        if &query.group != DEV_GROUPS[Devices::Printer as usize][Groups::Write as usize].unwrap() {
             error!("Wrong permission: {}, expected: printer_write", query.group);
             return Err("Error: wrong permissions".to_string());
         }
@@ -255,7 +256,7 @@ impl DeviceWrite for PrinterDevice {
 
 impl DeviceRequest for PrinterDevice {
     fn request_query(&self, query: &QCommand) -> Result<jsVal, String> {
-        if &query.group != "printer_request" {
+        if &query.group != DEV_GROUPS[Devices::Printer as usize][Groups::Request as usize].unwrap() {
             return Err("Error: wrong permissions".to_string());
         }
         match {
@@ -275,7 +276,7 @@ impl DeviceRequest for PrinterDevice {
 
 impl DeviceConfirm for PrinterDevice {
     fn confirm_query(&self, query: &QCommand) -> Result<jsVal, String> {
-        if &query.group != "printer_confirm" {
+        if &query.group != DEV_GROUPS[Devices::Printer as usize][Groups::Confirm as usize].unwrap() {
             return Err("Error: wrong permissions".to_string());
         }
         match query.command.as_str() {
@@ -298,7 +299,7 @@ impl DeviceConfirm for PrinterDevice {
     }
 
     fn dismiss_query(&self, query: &QCommand) -> Result<jsVal, String> {
-        if &query.group != "printer_confirm" {
+        if &query.group != DEV_GROUPS[Devices::Printer as usize][Groups::Dismiss as usize].unwrap() {
             return Err("Error: wrong permissions".to_string());
         }
         match {

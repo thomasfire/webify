@@ -6,6 +6,7 @@ use crate::device_trait::*;
 use crate::news_payload_parser::*;
 use crate::shikimori_scraper::run_parsing;
 use crate::database::Database;
+use crate::devices::{Devices, Groups, DEV_GROUPS};
 
 use redis::Commands;
 use r2d2_redis::{RedisConnectionManager, r2d2};
@@ -174,7 +175,7 @@ impl BlogDevice {
             "username": username,
             "post_count": read_cache.len(),
             "posts": read_cache.clone(),
-            "can_post": self.database.has_access_to_group(username, "blogdev_write")
+            "can_post": self.database.has_access_to_group(username, DEV_GROUPS[Devices::Blog as usize][Groups::Write as usize].unwrap())
         }))
     }
 }
@@ -184,7 +185,7 @@ impl DeviceRead for BlogDevice {
     fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
-        if query.group != "blogdev_read" {
+        if query.group != DEV_GROUPS[Devices::Blog as usize][Groups::Read as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
 
@@ -195,7 +196,7 @@ impl DeviceRead for BlogDevice {
     }
 
     fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
-        if query.group != "rstatus" {
+        if query.group != DEV_GROUPS[Devices::Zero as usize][Groups::RStatus as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
         self.get_list_of_posts(&query.username)
@@ -207,7 +208,7 @@ impl DeviceWrite for BlogDevice {
     fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
-        if query.group != "blogdev_write" {
+        if query.group != DEV_GROUPS[Devices::Blog as usize][Groups::Write as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
 
@@ -224,7 +225,7 @@ impl DeviceRequest for BlogDevice {
     fn request_query(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
-        if query.group != "blogdev_request" {
+        if query.group != DEV_GROUPS[Devices::Blog as usize][Groups::Request as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
 

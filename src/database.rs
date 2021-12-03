@@ -43,12 +43,27 @@ pub struct Database {
 
 /// Generates hash for the string. All password must go through this function
 pub fn get_hash(text: &str) -> String {
+    const SALTY: &str = "af7rifgyurgfixf6547bzmU%^RFVYIjkszfhfzkdg64^&Izkdfh';jkkhuilyug25686hjbghfcrtyegbkhjgvjintyiiohdryujiytu";
     let mut buff_str = text.to_string();
     for _x in 0..512 {
         let mut hasher = Sha256::new();
+        hasher.input_str(SALTY);
         hasher.input_str(&buff_str);
         buff_str = hasher.result_str()
     }
+
+    return buff_str;
+}
+
+/// Do not use for passwords
+pub fn get_fast_hash(text: &str) -> String {
+    const SALTY: &str = "745otsryouf^I$&^T#FgYUKEhbfzdbfkxuryfuxf2347823gya";
+    let mut buff_str = text.to_string();
+
+    let mut hasher = Sha256::new();
+    hasher.input_str(SALTY);
+    hasher.input_str(&buff_str);
+    buff_str = hasher.result_str();
 
     return buff_str;
 }

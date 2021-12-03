@@ -3,7 +3,7 @@ extern crate r2d2_redis;
 extern crate scraper;
 extern crate reqwest;
 
-use crate::database::get_hash;
+use crate::database::get_fast_hash;
 
 use scraper::{Html, Selector};
 use redis::Commands;
@@ -21,7 +21,7 @@ type RedisPool = r2d2::Pool<RedisConnectionManager>;
 const SHIKIMORI_URL: &str = "https://shikimori.one/forum/news";
 
 fn keyen_hash(s_to_hash: &str) -> String {
-    format!("article_{}", &get_hash(s_to_hash)[0..8])
+    format!("article_{}", &get_fast_hash(s_to_hash)[0..8])
 }
 
 fn get_header_links(curr_conn: &mut PooledConnection<RedisConnectionManager>) -> Result<Vec<String>, String> {

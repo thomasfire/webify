@@ -1,6 +1,7 @@
 use crate::device_trait::*;
 use crate::dashboard::QCommand;
 use crate::io_tools::exists;
+use crate::devices::{Devices, Groups, DEV_GROUPS};
 
 use serde_json::Value as jsVal;
 use serde_json::json;
@@ -201,7 +202,7 @@ impl DeviceRead for FileDevice {
     fn read_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
-        if query.group != "filer_read" {
+        if query.group != DEV_GROUPS[Devices::Filer as usize][Groups::Read as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
 
@@ -212,7 +213,7 @@ impl DeviceRead for FileDevice {
     }
 
     fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
-        if query.group != "rstatus" {
+        if query.group != DEV_GROUPS[Devices::Zero as usize][Groups::RStatus as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
         self.get_list(&query.username, &query.payload)
@@ -224,7 +225,7 @@ impl DeviceWrite for FileDevice {
     fn write_data(&self, query: &QCommand) -> Result<jsVal, String> {
         let command = query.command.as_str();
 
-        if query.group != "filer_write" {
+        if query.group != DEV_GROUPS[Devices::Filer as usize][Groups::Write as usize].unwrap() {
             return Err("No access to this action".to_string());
         }
 
