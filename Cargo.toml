@@ -14,18 +14,18 @@ toml = "0.5.*"
 serde_derive = "1.0.*"
 serde_json = "1.0"
 serde = "1.0.*"
-diesel = { version = "1.4.5", features = ["sqlite", "r2d2", "chrono"] }
+diesel = { version = "1.4.8", features = ["sqlite", "r2d2", "chrono"] }
 chrono = "0.4.*"
 futures = "0.3.*"
 rust-crypto = "0.2.*"
 rand = "0.8.*"
-flate2 = "1.0"
+flate2 = "1.0.*"
 rustls = "0.18.1"
-redis = { version = "0.19.*", features = ["r2d2"] }
-r2d2_redis = { git = "https://github.com/thomasfire/r2d2-redis.git" }
-regex = "1.4.*"
+redis = { version = "0.20.*", features = ["r2d2"] }
+r2d2_redis = "0.14.*"
+regex = "1.5.*"
 scraper = "0.12.*"
-reqwest = { version = "0.10.*", features = ["blocking"] }
+reqwest = { version = "0.11.*", features = ["blocking"] }
 handlebars = "4.1.*"
 env_logger = "0.9.*"
 log = "0.4.*"
