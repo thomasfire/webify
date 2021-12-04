@@ -1,0 +1,15 @@
+<script src="/static/chart.min.js"></script>
+
+<div>
+    <h3>{{chart_name}}</h3>
+    <canvas id="StatChart"></canvas>
+</div>
+
+<script>
+    {{chart_data}}
+
+    const StatChart = new Chart(
+            document.getElementById('StatChart'),
+            config
+    );
+</script>

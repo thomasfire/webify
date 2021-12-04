@@ -70,7 +70,7 @@ impl TryFrom<usize> for Devices {
     type Error = ();
 
     fn try_from(v: usize) -> Result<Self, Self::Error> {
-        if v >= 0 && v < DEVICES_LEN {
+        if v < DEVICES_LEN {
             Ok(DEVICE_ARRAY[v].clone())
         } else {
             Err(())

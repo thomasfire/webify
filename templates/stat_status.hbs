@@ -1,0 +1,65 @@
+<style></style>
+<div class="stats_block">
+    <div class="stats_form_simple">
+        <form action="/dashboard/statdev" method="post" id="statdev_chart_device">
+            <div class="command_f">
+                <input type="hidden" name="qtype" value="R" class="qtype">
+                <input type="hidden" name="group" value="statdev_read" class="group">
+                <input type="hidden" name="username" value="{{../username}}" class="username">
+                <input type="hidden" name="command" value="chart_device" class="command">
+                <input type="hidden" name="payload" value="" class="payload">
+            </div>
+            <a onclick="document.getElementById('statdev_chart_device').submit();">Device's chart</a>
+        </form>
+    </div>
+    <div class="stats_form_simple">
+        <form action="/dashboard/statdev" method="post" id="statdev_chart_user">
+            <div class="command_f">
+                <input type="hidden" name="qtype" value="R" class="qtype">
+                <input type="hidden" name="group" value="statdev_read" class="group">
+                <input type="hidden" name="username" value="{{../username}}" class="username">
+                <input type="hidden" name="command" value="chart_user" class="command">
+                <input type="hidden" name="payload" value="" class="payload">
+            </div>
+            <a onclick="document.getElementById('statdev_chart_user').submit();">User's chart</a>
+        </form>
+    </div>
+    <div class="stats_form_simple">
+        <form action="/dashboard/statdev" method="post" id="statdev_chart_command">
+            <div class="command_f">
+                <input type="hidden" name="qtype" value="R" class="qtype">
+                <input type="hidden" name="group" value="statdev_read" class="group">
+                <input type="hidden" name="username" value="{{../username}}" class="username">
+                <input type="hidden" name="command" value="chart_command" class="command">
+                <input type="hidden" name="payload" value="" class="payload">
+            </div>
+            <a onclick="document.getElementById('statdev_chart_command').submit();">Command's chart</a>
+        </form>
+    </div>
+<br>
+    <div class="stats_form_cross">
+        <form action="/dashboard/statdev" method="post" id="statdev_chart_cmd_cross_user">
+            <div class="command_f">
+                <input type="hidden" name="qtype" value="R" class="qtype">
+                <input type="hidden" name="group" value="statdev_read" class="group">
+                <input type="hidden" name="username" value="{{../username}}" class="username">
+                <input type="hidden" name="command" value="chart_cmd_cross_user" class="command">
+                <input type="text" name="payload" value="" placeholder="username" class="payload">
+            </div>
+            <a onclick="document.getElementById('statdev_chart_cmd_cross_user').submit();">Commands by user chart</a>
+        </form>
+    </div>
+<br>
+    <div class="stats_form_cross">
+        <form action="/dashboard/statdev" method="post" id="statdev_chart_device_cross_user">
+            <div class="command_f">
+                <input type="hidden" name="qtype" value="R" class="qtype">
+                <input type="hidden" name="group" value="statdev_read" class="group">
+                <input type="hidden" name="username" value="{{../username}}" class="username">
+                <input type="hidden" name="command" value="chart_device_cross_user" class="command">
+                <input type="text" name="payload" value="" placeholder="username" class="payload">
+            </div>
+            <a onclick="document.getElementById('statdev_chart_device_cross_user').submit();">Devices by user chart</a>
+        </form>
+    </div>
+</div>

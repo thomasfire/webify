@@ -3,16 +3,12 @@ use crate::device_trait::*;
 use crate::dashboard::QCommand;
 use crate::config::Config;
 use crate::devices::{Devices, Groups, DEV_GROUPS};
+use crate::stat_service::run_stat_service;
 
-use serde_json::{Value as jsVal, json, from_str as js_from_str, to_string as js_to_string};
+use serde_json::{Value as jsVal, json};
 use redis::Commands;
 use r2d2_redis::{RedisConnectionManager, r2d2 as r2d2_red};
-use r2d2_redis::r2d2::PooledConnection;
-use log::{debug, info, error};
-use chrono::Utc;
 
-use std::sync::{RwLock, Arc};
-use std::fmt::format;
 use std::ops::DerefMut;
 
 type RedisPool = r2d2_red::Pool<RedisConnectionManager>;
@@ -29,24 +25,16 @@ pub const STAT_CHARTS: [&'static str; 3] = [
     "chart_command"
 ];
 
-const CROSS_STAT_CHARTS: [&'static str; 2] = [
+pub const CROSS_STAT_CHARTS: [&'static str; 2] = [
     "chart_cmd_cross_user",
     "chart_device_cross_user",
 ];
 
-pub fn CMD_CROSS_USER(username: &str) -> String {
-    format!("{}_{}", CROSS_STAT_CHARTS[0], username)
-}
-
-pub fn DEVICE_CROSS_USER(username: &str) -> String {
-    format!("{}_{}", CROSS_STAT_CHARTS[1], username)
-}
-
 impl StatDevice {
     pub fn new(database: &Database, config: &Config) -> Self {
-        // TODO init Stat service
         let manager = RedisConnectionManager::new(config.redis_cache.as_str()).unwrap();
         let pool = RedisPool::builder().build(manager).unwrap();
+        run_stat_service(&pool, database, config);
         StatDevice {redis_pool: pool, database: database.clone()}
     }
 
@@ -59,15 +47,12 @@ impl StatDevice {
         let chart_data: String = curr_conn.deref_mut().get(chart_name)
             .map_err(|err| format!("Error on getting the chart {}: {:?}", chart_name, err))?;
 
-        match js_from_str::<jsVal>(&chart_data) {
-            Ok(_) => Ok(json!({
-                "template": "stat_chart.hbs",
-                "chart_data": chart_data,
-                "chart_name": chart_name,
-                "rootw_access": self.database.has_access_to_group(username, DEV_GROUPS[Devices::Root as usize][Groups::Write as usize].unwrap()) // for ban-hammer
-            })),
-            Err(err) => Err(format!("Error on parsing chart_data: {:?}", err))
-        }
+        Ok(json!({
+            "template": "stat_chart.hbs",
+            "chart_data": chart_data,
+            "chart_name": chart_name,
+            "rootw_access": self.database.has_access_to_group(username, DEV_GROUPS[Devices::Root as usize][Groups::Write as usize].unwrap()) // for ban-hammer
+        }))
     }
 
     fn get_cross_chart_data(&self, username: &str, chart_name: &str, payload: &str) -> Result<jsVal, String> {
@@ -79,16 +64,13 @@ impl StatDevice {
         let chart_data: String = curr_conn.deref_mut().get(format!("{}_{}", chart_name, payload))
             .map_err(|err| format!("Error on getting the chart {}: {:?}", chart_name, err))?;
 
-        match js_from_str::<jsVal>(&chart_data) {
-            Ok(_) => Ok(json!({
-                "template": "stat_cross_chart.hbs",
-                "chart_data": chart_data,
-                "chart_name": chart_name,
-                "chart_user": payload,
-                "rootw_access": self.database.has_access_to_group(username, DEV_GROUPS[Devices::Root as usize][Groups::Write as usize].unwrap()) // for ban-hammer
-            })),
-            Err(err) => Err(format!("Error on parsing chart_data: {:?}", err))
-        }
+        Ok(json!({
+            "template": "stat_cross_chart.hbs",
+            "chart_data": chart_data,
+            "chart_name": chart_name,
+            "chart_user": payload,
+            "rootw_access": self.database.has_access_to_group(username, DEV_GROUPS[Devices::Root as usize][Groups::Write as usize].unwrap()) // for ban-hammer
+        }))
     }
 }
 

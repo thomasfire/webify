@@ -73,7 +73,7 @@ struct Dispatch {
 }
 
 impl Dispatch {
-    pub fn new(database: &Database, redis_cred: &str, config: &Config) -> Dispatch {
+    pub fn new(database: &Database, config: &Config) -> Dispatch {
         let filer = FileDevice::new();
         Dispatch {
             printer_device: PrinterDevice::new(Arc::new(filer.clone())),
@@ -114,7 +114,7 @@ impl DashBoard<'_> {
     pub fn new<'a, 'b>(config: &'a Config) -> Result<DashBoard<'b>, String> {
         let database = Database::new(config.db_config.as_str(), config.redis_cache.as_str()).unwrap();
         let ds: DashBoard = DashBoard {
-            dispatcher: Dispatch::new(&database, &config.redis_config, &config),
+            dispatcher: Dispatch::new(&database, &config),
             database: database,
             templater: TemplateCache::new(),
         };

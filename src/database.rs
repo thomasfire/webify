@@ -5,7 +5,7 @@ extern crate rand;
 extern crate redis;
 extern crate r2d2_redis;
 
-use crate::models::{UserAdd, User, History, LineWebify, HistoryForm};
+use crate::models::{UserAdd, User, History, LineWebify, HistoryForm, StatEntry};
 use crate::schema::*;
 use crate::devices;
 
@@ -404,6 +404,22 @@ impl Database {
             }
         }
         Ok(())
+    }
+
+    pub fn load_stats_by_query(&self, query: &str) -> Result<Vec<StatEntry>, String> {
+        let connection = match self.sql_pool.get() {
+            Ok(conn) => {
+                debug!("Got connection");
+                conn
+            }
+            Err(err) => return Err(format!("Error on load_stats_by_query (connection): {:?}", err)),
+        };
+
+        let hist: Vec<StatEntry> = diesel::sql_query(query)
+            .load(&connection)
+            .expect("Query failed");
+
+        Ok(hist)
     }
 }
 

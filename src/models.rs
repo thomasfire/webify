@@ -3,6 +3,7 @@ use crate::schema::*;
 use chrono::NaiveDateTime;
 use serde_json::Value as jsVal;
 use serde_json::json;
+use diesel::sql_types::{Text, Integer};
 
 #[derive(Copy, Clone)]
 pub enum RejectReason {
@@ -61,6 +62,14 @@ pub struct History {
     pub qtype: String,
     pub rejected: i32,
     pub timestamp: NaiveDateTime,
+}
+
+#[derive(Queryable, QueryableByName, Clone)]
+pub struct StatEntry {
+    #[sql_type = "Text"]
+    pub label: String,
+    #[sql_type = "Integer"]
+    pub counter: i32
 }
 
 impl LineWebify for History {
