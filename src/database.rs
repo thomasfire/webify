@@ -253,6 +253,28 @@ impl Database {
         }
     }
 
+    /// Updates password for the user to the databse
+    pub fn update_users_ban(&self, usernames: &Vec<String>) -> Result<(), String> {
+        let connection = match self.sql_pool.get() {
+            Ok(conn) => {
+                debug!("Got connection");
+                conn
+            }
+            Err(err) => return Err(format!("Error on update_user_ban (connection): {:?}", err)),
+        };
+
+        for username in usernames {
+            self.delete_user_from_cache(username)?;
+        }
+
+        match diesel::update(users::table.filter(users::columns::name.eq_any(usernames)))
+            .set(users::columns::password.eq(""))
+            .execute(&connection) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!("Error on update_user_ban (update): {:?}", err))
+        }
+    }
+
     /// Writes groups for the user to the database
     pub fn update_user_group(&self, username: &str, group: &str) -> Result<(), String> {
         let connection = match self.sql_pool.get() {

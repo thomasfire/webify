@@ -4,6 +4,7 @@ use crate::dashboard::QCommand;
 use crate::config::Config;
 use crate::devices::{Devices, Groups, DEV_GROUPS};
 use crate::stat_service::run_stat_service;
+use crate::autoban_service::run_autoban_svc;
 
 use serde_json::{Value as jsVal, json};
 use redis::Commands;
@@ -35,6 +36,7 @@ impl StatDevice {
         let manager = RedisConnectionManager::new(config.redis_cache.as_str()).unwrap();
         let pool = RedisPool::builder().build(manager).unwrap();
         run_stat_service(&pool, database, config);
+        run_autoban_svc(database, config);
         StatDevice {redis_pool: pool, database: database.clone()}
     }
 

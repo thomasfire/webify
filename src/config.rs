@@ -17,6 +17,8 @@ pub struct Config {
     pub general_stat_period_s: u32,
     pub cross_user_stat_period_s: u32,
     pub period_to_request_s: u32,
+    pub autoban_period_s: u32,
+    pub autoban_anomaly_factor: f64,
 }
 
 pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
@@ -67,6 +69,8 @@ pub fn read_config<T: Serialize + DeserializeOwned + Clone>(conf_path: &str) -> 
 ///     general_stat_period_s: 3600,
 ///     cross_user_stat_period_s: 3600,
 ///     period_to_request_s: 2592000,
+///     autoban_period_s: 24*3600,
+///     autoban_anomaly_factor: 8.0,
 ///     use_scraper: true
 /// };
 /// write_database(config).unwrap();
@@ -100,6 +104,8 @@ pub fn setup() {
     let general_stat_period = io_tools::read_std_line("General stats period in seconds (0 to disable): ").parse::<u32>().unwrap();
     let cross_user_stat_period = io_tools::read_std_line("Per user stats period in seconds (0 to disable): ").parse::<u32>().unwrap();
     let period_to_request = io_tools::read_std_line("Period of the statistics (0 to disable): ").parse::<u32>().unwrap();
+    let autoban_s = io_tools::read_std_line("Period of the autoban worker (0 to disable): ").parse::<u32>().unwrap();
+    let anomaly_f = io_tools::read_std_line("Factor for detecting anomalies via autoban (0 to disable): ").parse::<f64>().unwrap();
 
     println!("\nHere is your printers:\n{}\n", PrinterDevice::get_printers());
     let m_printer = io_tools::read_std_line("Enter name of the printer: ");
@@ -113,6 +119,8 @@ pub fn setup() {
         general_stat_period_s: general_stat_period,
         cross_user_stat_period_s: cross_user_stat_period,
         period_to_request_s: period_to_request,
+        autoban_period_s: autoban_s,
+        autoban_anomaly_factor: anomaly_f,
         use_scraper
     }, DEFAULT_CONFIG_PATH) {
         Ok(_) => println!("Ok"),
