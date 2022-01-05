@@ -29,7 +29,7 @@ pub trait LineWebify {
 pub struct User {
     pub id: i32,
     pub name: String,
-    pub password: String,
+    pub password: String, // It's probably okay because it remains hashed
     pub groups: String,
 }
 

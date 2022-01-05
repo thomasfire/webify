@@ -30,3 +30,4 @@ handlebars = "4.1.*"
 env_logger = "0.9.*"
 log = "0.4.*"
 phf = { version = "0.10.*", features = ["macros"] }
+secstr = { version = "0.4.*", features = ["serde"] }

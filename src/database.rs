@@ -21,6 +21,7 @@ use diesel::result::Error as dError;
 use serde_json::from_str as js_from_str;
 use serde_json::to_string as js_to_str;
 use log::{debug, error, info};
+use secstr::SecStr;
 
 use std::collections::{HashMap, BTreeSet};
 use std::collections::btree_map::BTreeMap;
@@ -42,17 +43,17 @@ pub struct Database {
 }
 
 /// Generates hash for the string. All password must go through this function
-pub fn get_hash(text: &str) -> String {
+pub fn get_hash(text: &SecStr) -> String {
     const SALTY: &str = "af7rifgyurgfixf6547bzmU%^RFVYIjkszfhfzkdg64^&Izkdfh';jkkhuilyug25686hjbghfcrtyegbkhjgvjintyiiohdryujiytu";
-    let mut buff_str = text.to_string();
+    let mut buff_str = text.clone();
     for _x in 0..512 {
         let mut hasher = Sha256::new();
         hasher.input_str(SALTY);
-        hasher.input_str(&buff_str);
-        buff_str = hasher.result_str()
+        hasher.input(buff_str.unsecure());
+        buff_str = SecStr::from(hasher.result_str());
     }
 
-    return buff_str;
+    return buff_str.to_string();
 }
 
 /// Do not use for passwords
@@ -70,7 +71,7 @@ pub fn get_fast_hash(text: &str) -> String {
 
 /// Generates random token for the user
 pub fn get_random_token() -> String {
-    get_hash(&(0..32).map(|_| random::<char>()).collect::<String>())
+    get_fast_hash(&(0..32).map(|_| random::<char>()).collect::<String>())
 }
 
 impl Database {
@@ -210,7 +211,7 @@ impl Database {
     }
 
     /// Inserts new user to the database, cookies are not assigned yet
-    pub fn insert_user(&self, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
+    pub fn insert_user(&self, username: &str, password: &SecStr, groups: Option<&str>) -> Result<(), String> {
         insert_user(&self.sql_pool, username, password, groups)
     }
 
@@ -235,7 +236,7 @@ impl Database {
     }
 
     /// Updates password for the user to the databse
-    pub fn update_user_pass(&self, username: &str, password: &str) -> Result<(), String> {
+    pub fn update_user_pass(&self, username: &str, password: &SecStr) -> Result<(), String> {
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
@@ -347,7 +348,7 @@ impl Database {
     /// assert!(validate_user(&conns, "thomasfire", "bestpasswort").unwrap());
     /// assert_ne!(validate_user(&conns, "eva", "badpasswort").unwrap());
     /// ```
-    pub fn validate_user(&self, username: &str, password: &str) -> Result<bool, String> {
+    pub fn validate_user(&self, username: &str, password: &SecStr) -> Result<bool, String> {
         let mut redis_conn = self.redis_pool.get()
             .map_err(|err| format!("Error on getting the redis connection get_user_groups: {:?}", err))?;
 
@@ -446,7 +447,7 @@ impl Database {
 }
 
 
-pub fn insert_user(pool: &SQLPool, username: &str, password: &str, groups: Option<&str>) -> Result<(), String> {
+pub fn insert_user(pool: &SQLPool, username: &str, password: &SecStr, groups: Option<&str>) -> Result<(), String> {
     let connection = match pool.get() {
         Ok(conn) => {
             debug!("Got connection");
@@ -461,7 +462,7 @@ pub fn insert_user(pool: &SQLPool, username: &str, password: &str, groups: Optio
     };
     let new_user = UserAdd {
         name: username,
-        password: &get_hash(&password),
+        password: &get_hash(password),
         groups: gs,
     };
 

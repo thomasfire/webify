@@ -6,6 +6,7 @@ use crate::printer_device::{PrinterDevice, PRINTER_CONFIG_PATH, PrinterConfig};
 use crate::devices::list_all_groups;
 use serde::{Serialize, Deserialize};
 use serde::de::DeserializeOwned;
+use secstr::SecStr;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -144,7 +145,7 @@ pub fn setup() {
 
 pub fn add_root_user() {
     let username = io_tools::read_std_line("Enter root username: ");
-    let password = io_tools::read_std_line("Enter root password: ");
+    let password = SecStr::from(io_tools::read_std_line("Enter root password: "));
 
     let conf = match read_config::<Config>(DEFAULT_CONFIG_PATH) {
         Ok(data) => data,
@@ -174,7 +175,7 @@ pub fn add_root_user() {
 /// Adds user to the previously configured database
 pub fn add_user() {
     let username = io_tools::read_std_line("Enter new username: ");
-    let password = io_tools::read_std_line("Enter new password: ");
+    let password = SecStr::from(io_tools::read_std_line("Enter new password: "));
     let groups = io_tools::read_std_line("Enter groups, separated by comma: ");
 
     let conf = match read_config::<Config>(DEFAULT_CONFIG_PATH) {

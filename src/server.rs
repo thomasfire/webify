@@ -13,6 +13,7 @@ use log::{debug, error};
 use actix_web::{Error, http};
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use rustls::{NoClientAuth, ServerConfig};
+use secstr::SecStr;
 
 use std::sync::{Arc, Mutex};
 use std::fs::File;
@@ -38,7 +39,7 @@ async fn responce_static_file(info: web::Path<String>, mdata: web::Data<FileCach
 #[derive(Deserialize)]
 struct LoginInfo {
     username: String,
-    password: String,
+    password: SecStr,
 }
 
 

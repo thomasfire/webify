@@ -5,6 +5,7 @@ use crate::device_trait::*;
 use crate::devices::{Devices, Groups, DEV_GROUPS};
 
 use serde_json::{Value as jsVal, json, from_str as js_from_str};
+use secstr::SecStr;
 
 #[derive(Clone)]
 pub struct RootDev {
@@ -62,15 +63,15 @@ impl RootDev {
         };
 
         let password = match data.get("password") {
-            Some(d) => d.as_str().unwrap_or(""),
+            Some(d) => SecStr::from(d.as_str().unwrap_or("")),
             None => return Err(format!("Error on inserting users: invalid syntax: couldn't find password"))
         };
-        if password.len() < 1 || name.len() < 1 {
+        if password.unsecure().len() < 1 || name.len() < 1 {
             return Err(format!("Username or password is in wrong format"));
         }
 
         let groups = data.get("groups").map(|data| { data.as_str() }).unwrap_or(None);
-        match self.database.insert_user(name, password, groups) {
+        match self.database.insert_user(name, &password, groups) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on inserting user: {}", e))
         }
@@ -84,15 +85,15 @@ impl RootDev {
         };
 
         let password = match data.get("password") {
-            Some(d) => d.as_str().unwrap_or(""),
+            Some(d) => SecStr::from(d.as_str().unwrap_or("")),
             None => return Err(format!("Error on updating users : invalid syntax: couldn't find password"))
         };
 
-        if password.len() < 1 || name.len() < 1 {
+        if password.unsecure().len() < 1 || name.len() < 1 {
             return Err(format!("Username or password is in wrong format"));
         }
 
-        match self.database.update_user_pass(name, password) {
+        match self.database.update_user_pass(name, &password) {
             Ok(_) => Ok("Ok".to_string()),
             Err(e) => Err(format!("Error on updating user pass: {}", e))
         }
