@@ -22,6 +22,7 @@ use serde_json::from_str as js_from_str;
 use serde_json::to_string as js_to_str;
 use log::{debug, error, info};
 use secstr::SecStr;
+use rustc_serialize::hex::ToHex;
 
 use std::collections::{HashMap, BTreeSet};
 use std::collections::btree_map::BTreeMap;
@@ -45,15 +46,16 @@ pub struct Database {
 /// Generates hash for the string. All password must go through this function
 pub fn get_hash(text: &SecStr) -> String {
     const SALTY: &str = "af7rifgyurgfixf6547bzmU%^RFVYIjkszfhfzkdg64^&Izkdfh';jkkhuilyug25686hjbghfcrtyegbkhjgvjintyiiohdryujiytu";
-    let mut buff_str = text.clone();
+    let initial_buff_sz = if 128 > text.unsecure().len() { 128 as usize } else { text.unsecure().len() };
+    let mut buff_str = SecStr::new(vec![0; initial_buff_sz]);
+    buff_str.unsecure_mut()[0..text.unsecure().len()].copy_from_slice(text.unsecure());
     for _x in 0..512 {
         let mut hasher = Sha256::new();
         hasher.input_str(SALTY);
         hasher.input(buff_str.unsecure());
-        buff_str = SecStr::from(hasher.result_str());
+        hasher.result(buff_str.unsecure_mut());
     }
-
-    return buff_str.to_string();
+    return buff_str.unsecure()[0..32].to_hex();
 }
 
 /// Do not use for passwords
@@ -72,6 +74,14 @@ pub fn get_fast_hash(text: &str) -> String {
 /// Generates random token for the user
 pub fn get_random_token() -> String {
     get_fast_hash(&(0..32).map(|_| random::<char>()).collect::<String>())
+}
+
+fn validate_password(password: &SecStr) -> Result<(), String> {
+    let sz = password.unsecure().len();
+    if sz < 8 || sz > 64 {
+        return Err(format!("Unexpected password's length: {}, should be from 8 to 64", sz));
+    }
+    Ok(())
 }
 
 impl Database {
@@ -225,7 +235,7 @@ impl Database {
             Err(err) => return Err(format!("Error on insert_history (connection): {:?}", err)),
         };
 
-        let entry = HistoryForm {username, device, command, qtype, rejected};
+        let entry = HistoryForm { username, device, command, qtype, rejected };
 
         match diesel::insert_into(history::table)
             .values(entry)
@@ -237,6 +247,7 @@ impl Database {
 
     /// Updates password for the user to the databse
     pub fn update_user_pass(&self, username: &str, password: &SecStr) -> Result<(), String> {
+        validate_password(password)?;
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
@@ -349,6 +360,7 @@ impl Database {
     /// assert_ne!(validate_user(&conns, "eva", "badpasswort").unwrap());
     /// ```
     pub fn validate_user(&self, username: &str, password: &SecStr) -> Result<bool, String> {
+        validate_password(password)?;
         let mut redis_conn = self.redis_pool.get()
             .map_err(|err| format!("Error on getting the redis connection get_user_groups: {:?}", err))?;
 
@@ -448,6 +460,7 @@ impl Database {
 
 
 pub fn insert_user(pool: &SQLPool, username: &str, password: &SecStr, groups: Option<&str>) -> Result<(), String> {
+    validate_password(password)?;
     let connection = match pool.get() {
         Ok(conn) => {
             debug!("Got connection");
@@ -519,8 +532,7 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
         id INTEGER primary key not null,
         name TEXT not null,
         password TEXT not null,
-        groups TEXT not null,
-        wrong_attempts INTEGER null
+        groups TEXT not null
     );
     CREATE TABLE history (
         id INTEGER primary key not null,
