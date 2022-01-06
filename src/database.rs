@@ -84,6 +84,16 @@ fn validate_password(password: &SecStr) -> Result<(), String> {
     Ok(())
 }
 
+fn validate_username(username: &str) -> Result<(), String> {
+    if username.len() < 4 || username.len() > 32 {
+        return Err(format!("Unexpected username's length: {}, should be from 4 to 32", username.len()));
+    }
+    if !username.chars().all(|x| x.is_alphanumeric() || x == '_') {
+        return Err(format!("Unexpected username's symbols: `{}`, allowed symbols are latin symbols (abcDEFG etc.), numbers and underline _", username));
+    }
+    Ok(())
+}
+
 impl Database {
     pub fn new(sql_conf: &str, redis_conf: &str) -> Result<Self, String> {
         let redis_manager = RedisConnectionManager::new(redis_conf)
@@ -106,6 +116,7 @@ impl Database {
 
     /// Returns the list of user groups
     fn get_user_groups(&self, username: &str) -> Result<Vec<String>, String> {
+        validate_username(username)?;
         let mut redis_conn = self.redis_pool.get()
             .map_err(|err| format!("Error on getting the redis connection get_user_groups: {:?}", err))?;
 
@@ -137,6 +148,7 @@ impl Database {
     }
 
     fn delete_user_from_cache(&self, username: &str) -> Result<(), String> {
+        validate_username(username)?;
         let mut redis_conn = self.redis_pool.get()
             .map_err(|err| format!("Error on getting the redis connection delete_user_from_cache: {:?}", err))?;
         redis_conn.deref_mut().del(username)
@@ -165,6 +177,7 @@ impl Database {
 
     /// Returns the vector of all devices which are allowed for use by user
     pub fn get_user_devices(&self, username: &str) -> Result<Vec<String>, String> {
+        validate_username(username)?;
         let groups = self.get_user_groups(username)?;
 
         let mapped_dev = self.mapped_devices.read()
@@ -227,6 +240,7 @@ impl Database {
 
     /// Inserts new group to the databse
     pub fn insert_history(&self, username: &str, device: &str, command: &str, qtype: &str, rejected: i32) -> Result<(), String> {
+        validate_username(username)?;
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
@@ -248,6 +262,7 @@ impl Database {
     /// Updates password for the user to the databse
     pub fn update_user_pass(&self, username: &str, password: &SecStr) -> Result<(), String> {
         validate_password(password)?;
+        validate_username(username)?;
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
@@ -276,6 +291,7 @@ impl Database {
         };
 
         for username in usernames {
+            validate_username(username)?;
             self.delete_user_from_cache(username)?;
         }
 
@@ -289,6 +305,7 @@ impl Database {
 
     /// Writes groups for the user to the database
     pub fn update_user_group(&self, username: &str, group: &str) -> Result<(), String> {
+        validate_username(username)?;
         let connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
@@ -308,6 +325,7 @@ impl Database {
 
     /// Writes cookies for the user to the database
     pub fn assign_cookie(&self, username: &str, cookie: &str) -> Result<(), String> {
+        validate_username(username)?;
         self.cookie_cache.write()
             .map_err(|err| format!("Error on writing to cookie cache: {:?}", err))?
             .insert(cookie.to_string(), username.to_string());
@@ -324,6 +342,7 @@ impl Database {
 
     /// Returns whether user has access to the group
     pub fn has_access_to_group(&self, username: &str, group_name: &str) -> Result<bool, String> {
+        validate_username(username)?;
         let user_groups = match self.get_user_groups(username) {
             Ok(data) => data,
             Err(err) => return Err(format!("Error on has_access on getting user groups: {:?}", err))
@@ -337,6 +356,7 @@ impl Database {
 
     /// Returns whether user has access to the device, or not
     pub fn has_access_to_device(&self, username: &str, device: &str) -> Result<bool, String> {
+        validate_username(username)?;
         let user_dev = match self.get_user_devices(username) {
             Ok(data) => data,
             Err(err) => return Err(format!("Error on has_access on getting user devices: {:?}", err))
@@ -361,6 +381,7 @@ impl Database {
     /// ```
     pub fn validate_user(&self, username: &str, password: &SecStr) -> Result<bool, String> {
         validate_password(password)?;
+        validate_username(username)?;
         let mut redis_conn = self.redis_pool.get()
             .map_err(|err| format!("Error on getting the redis connection get_user_groups: {:?}", err))?;
 
@@ -461,6 +482,7 @@ impl Database {
 
 pub fn insert_user(pool: &SQLPool, username: &str, password: &SecStr, groups: Option<&str>) -> Result<(), String> {
     validate_password(password)?;
+    validate_username(username)?;
     let connection = match pool.get() {
         Ok(conn) => {
             debug!("Got connection");
