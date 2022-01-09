@@ -17,7 +17,7 @@ type RedisPool = r2d2_red::Pool<RedisConnectionManager>;
 #[derive(Clone)]
 pub struct StatDevice {
     redis_pool: RedisPool,
-    database: Database
+    database: Database,
 }
 
 pub const STAT_CHARTS: [&'static str; 3] = [
@@ -37,7 +37,7 @@ impl StatDevice {
         let pool = RedisPool::builder().build(manager).unwrap();
         run_stat_service(&pool, database, config);
         run_autoban_svc(database, config);
-        StatDevice {redis_pool: pool, database: database.clone()}
+        StatDevice { redis_pool: pool, database: database.clone() }
     }
 
     fn get_chart_data(&self, username: &str, chart_name: &str) -> Result<jsVal, String> {
@@ -98,7 +98,8 @@ impl DeviceRead for StatDevice {
             return Err("No access to this action".to_string());
         }
         Ok(json!({
-            "template": "stat_status.hbs"
+            "template": "stat_status.hbs",
+            "username": query.username
         }))
     }
 }

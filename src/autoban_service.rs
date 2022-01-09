@@ -23,7 +23,11 @@ fn perform_autoban(database: &Database, period_to_view: u32, anomaly_f: f64) -> 
 
     debug!("Attempting to ban: `{}`", to_ban.join(", "));
 
-    database.update_users_ban(&to_ban)
+    if to_ban.len() > 0 {
+        database.update_users_ban(&to_ban)
+    } else {
+        Ok(())
+    }
 }
 
 pub fn run_autoban_svc(database: &Database, config: &Config) {
@@ -40,7 +44,7 @@ pub fn run_autoban_svc(database: &Database, config: &Config) {
             let res = perform_autoban(&db_copy, period_view, anomaly_f);
             match res {
                 Ok(_) => info!("Autoban successfully made a round"),
-                Err(err) => error!("Error occured in autoban: {}", err)
+                Err(err) => error!("Error occurred in autoban: {}", err)
             };
             thread::sleep(Duration::from_secs(period as u64));
         }

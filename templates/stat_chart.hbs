@@ -1,4 +1,4 @@
-<script src="/static/chart.min.js"></script>
+<script src="/static/chart.min.js" type="application/javascript"></script>
 
 <div>
     <h3>{{chart_name}}</h3>
@@ -6,7 +6,7 @@
 </div>
 
 <script>
-    {{chart_data}}
+        {{{chart_data}}}
 
     const StatChart = new Chart(
             document.getElementById('StatChart'),

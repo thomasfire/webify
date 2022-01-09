@@ -148,7 +148,10 @@ impl FileDevice {
     fn get_list(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
-            return Err("No container was found".to_string());
+            match fs::create_dir(&filepath) {
+                Ok(_) => (),
+                Err(err) => return Err(format!("No container was found and couldn't create new: {:?}", err))
+            };
         }
         if payload.contains("..") {
             return Err("Bad request".to_string());

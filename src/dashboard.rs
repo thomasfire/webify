@@ -80,7 +80,7 @@ impl Dispatch {
             file_device: filer,
             root_device: RootDev::new(database),
             blog_device: BlogDevice::new(&config.redis_config, database, config.use_scraper),
-            stat_device: StatDevice::new(database, config)
+            stat_device: StatDevice::new(database, config),
         }
     }
 
@@ -180,7 +180,7 @@ fn get_available_info(dasher: &DashBoard<'_>, username: &str, device: &str) -> j
         qtype: "S".to_string(),
         group: "rstatus".to_string(),
         username: username.to_string(),
-        command: "".to_string(),
+        command: "rstatus".to_string(),
         payload: "".to_string(),
     };
 
@@ -234,7 +234,10 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
     match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
                                               "devices": mdata.database.get_user_devices(&user).unwrap_or(vec![]),
-                                              "err": match &inner_template{Ok(_) => "", Err(err) => err},
+                                              "err": match inner_info.get("err") {
+                                                  Some(v) => v.as_str().unwrap_or(""),
+                                                  None => match &inner_template{Ok(_) => "", Err(err) => err}
+                                              },
                                               "subpage": match &inner_template{Ok(data) => data, Err(_) => ""}
                                             })) {
         Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
@@ -268,7 +271,7 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
     }
 
     let (inner_info, reject) = match mdata.dispatch(&user, info.as_str(), form.0.clone()) {
-        Ok(d) => (d, RejectReason::Ok as i32) ,
+        Ok(d) => (d, RejectReason::Ok as i32),
         Err(e) => (json!({"err": format!("Error on getting the available info: {}", e)}), RejectReason::NoAuth as i32)
     };
     match mdata.database.insert_history(&user, info.as_str(), &form.0.command, &form.0.qtype, reject) {
@@ -279,7 +282,10 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
     match mdata.templater.render_template("dashboard.hbs",
                                           &json!({
                                               "devices": mdata.database.get_user_devices(&user).unwrap_or(vec![]),
-                                              "err": match &inner_template{Ok(_) => "", Err(err) => err},
+                                              "err": match inner_info.get("err") {
+                                                  Some(v) => v.as_str().unwrap_or(""),
+                                                  None => match &inner_template{Ok(_) => "", Err(err) => err}
+                                              },
                                               "subpage": match &inner_template{Ok(data) => data, Err(_) => ""}
                                             })) {
         Ok(data) => Ok(HttpResponse::Ok().content_type("text/html; charset=utf-8").body(data)),
@@ -319,7 +325,7 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
                 Ok(htmld) => return Ok(HttpResponse::BadRequest().body(htmld)),
                 Err(err) => {
                     error!("Error on rendering template: {}", err);
-                    return Ok(HttpResponse::InternalServerError().body("Internal error")) }
+                    return Ok(HttpResponse::InternalServerError().body("Internal error")); }
             }
         }
     };

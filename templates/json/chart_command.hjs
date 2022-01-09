@@ -1,23 +1,23 @@
 const data = {
-    labels: [{{#each labels as |label|}}{{label}},{{/each}}],
+    labels: [{{#each labels as |label|}}"{{label}}",{{/each}}],
     datasets: [{
-        label: 'Chart by commands',
+        label: "Chart by commands",
         data: [{{#each data_values as |dval|}}{{dval}},{{/each}}],
         backgroundColor: [
             {{#each alpha_colors as |color|}}
-                {{color}},
+                "{{color}}",
             {{/each}}
         ],
         borderColor: [
             {{#each simple_colors as |color|}}
-                {{color}},
+                "{{color}}",
             {{/each}}
         ],
         borderWidth: 1
     }]
 };
 const config = {
-    type: 'bar',
+    type: "bar",
     data: data,
     options: {
         scales: {

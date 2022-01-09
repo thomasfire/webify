@@ -216,7 +216,7 @@ impl DeviceRead for PrinterDevice {
     }
 
     fn read_status(&self, query: &QCommand) -> Result<jsVal, String> {
-        if &query.group != "rstatus" {
+        if &query.group != DEV_GROUPS[Devices::Zero as usize][Groups::RStatus as usize].unwrap() {
             return Err("Error: wrong permission".to_string());
         }
 

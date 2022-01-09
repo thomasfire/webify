@@ -31,6 +31,22 @@ fn get_static_file(info: &str, mdata: web::Data<FileCache>) -> Result<HttpRespon
     Ok(HttpResponse::Ok().body(format!("{}", static_str)))
 }
 
+fn get_static_file_raw(info: &str, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    let static_bytes = match mdata.get_ref().clone().get_byte_file(info) {
+        Ok(res) => res,
+        Err(err) => {
+            error!("Error on reading static file: {}", err);
+            return Ok(HttpResponse::InternalServerError().body(format!("Error on loading raw file")));
+        }
+    };
+
+    Ok(HttpResponse::Ok().body(static_bytes))
+}
+
+async fn responce_static_file_raw(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    get_static_file_raw(&info.0, mdata)
+}
+
 async fn responce_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     get_static_file(&info.0, mdata)
 }
@@ -39,7 +55,7 @@ async fn responce_static_file(info: web::Path<String>, mdata: web::Data<FileCach
 #[derive(Deserialize)]
 struct LoginInfo {
     username: String,
-    password: SecStr,
+    password: String,
 }
 
 
@@ -48,7 +64,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     debug!("login_handler: {:?}", id.identity());
 
     let nick = form.username.clone();
-    let password = form.password.clone();
+    let password = SecStr::from(form.password.as_str());
 
     let validated = match mdata.database.validate_user(&nick, &password) {
         Ok(data) => data,
@@ -161,6 +177,7 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
                 .route(web::get().to(dashboard_page)))
             .service(web::resource("/dashboard/{device}").to(dashboard_page))
             .service(web::resource("/static/{path}").to(responce_static_file))
+            .service(web::resource("/rstatic/{path}").to(responce_static_file_raw))
             .service(web::resource("/download/{path}").to(file_sender))
             .service(
                 web::resource("/upload/{path}")

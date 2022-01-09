@@ -1,6 +1,6 @@
 [package]
 name = "webify"
-version = "0.6.0-dev"
+version = "0.6.0-beta"
 authors = ["thomasfire <tomasfire@live.com>"]
 edition = "2018"
 

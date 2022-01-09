@@ -3,6 +3,8 @@
 <head>
     <title>Webify Dashboard</title>
     <link rel="stylesheet" type="text/css" href="/static/dashboard.css" media="screen"/>
+    <link rel="icon" type="image/png" sizes="32x32" href="/rstatic/favicon32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/rstatic/favicon16.png">
 </head>
 <body>
 <div class="dashboard">
@@ -10,6 +12,7 @@
     <div class="devices">
         <div class="devrow">
             <div class="devcell">
+                <img src="/rstatic/webify.png" height="64" width="64"><br>
                 Available devices: <br>
                 <ul class="devlist">
                 {{#each devices as |dev|}}
