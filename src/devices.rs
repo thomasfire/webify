@@ -48,7 +48,7 @@ pub const DEV_GROUPS: [[Option<&'static str>; GROUP_LEN]; DEVICES_LEN] = [
     [Some("rstatus"), None, None, None, None, None], // Zero device
     [None, Some("filer_read"), Some("filer_write"), None, None, None], // Filer device
     [None, Some("root_read"), Some("root_write"), None, None, None], // Root device
-    [None, Some("printer_read"), Some("printer_write"), Some("printer_request"), Some("printer_confirm"), Some("printer_confirm")], // Printer device
+    [None, Some("printer_read"), Some("printer_write"), Some("printer_request"), Some("printer_confirm"), Some("printer_dismiss")], // Printer device
     [None, Some("blogdev_read"), Some("blogdev_write"), Some("blogdev_request"), None, None], // Blog device
     [None, Some("statdev_read"), None, None, None, None], // Stat device
 ];

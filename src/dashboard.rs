@@ -74,7 +74,7 @@ struct Dispatch {
 
 impl Dispatch {
     pub fn new(database: &Database, config: &Config) -> Dispatch {
-        let filer = FileDevice::new();
+        let filer = FileDevice::new(database);
         Dispatch {
             printer_device: PrinterDevice::new(Arc::new(filer.clone())),
             file_device: filer,

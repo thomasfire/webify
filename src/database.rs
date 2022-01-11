@@ -419,6 +419,12 @@ impl Database {
             None => return Err(format!("Error no user: `{}`", username))
         };
 
+        {
+            let _ = redis_conn.deref_mut().set::<&str, String, String>(username, js_to_str(&got_user.get_content()).unwrap_or("".to_string()))
+                .map_err(|err| error!("Error in caching to redis: {:?}", err));
+            let _ = redis_conn.deref_mut().expire::<&str, usize>(username, REDIS_USER_EXPIRE)
+                .map_err(|err| error!("Error in setting expire to redis: {:?}", err));
+        }
 
         let wrongs = match self.attempts_cache.read()
             .map_err(|err| format!("Error on reading attempts: {:?}", err))?

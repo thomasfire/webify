@@ -2,6 +2,7 @@ use crate::device_trait::*;
 use crate::dashboard::QCommand;
 use crate::io_tools::exists;
 use crate::devices::{Devices, Groups, DEV_GROUPS};
+use crate::database::Database;
 
 use serde_json::Value as jsVal;
 use serde_json::json;
@@ -24,16 +25,18 @@ struct BufferedFile {
 pub struct FileDevice {
     storage: String,
     buffered_files: Arc<Mutex<BTreeMap<String, BufferedFile>>>,
+    database: Database,
 }
 
 impl FileDevice {
     /// Creates new instance of FileDevice
-    pub fn new() -> FileDevice {
+    pub fn new(database: &Database) -> FileDevice {
         let store = "filer".to_string();
         if !exists(&store) {
             fs::create_dir(&store).unwrap();
         }
-        FileDevice { storage: store, buffered_files: Arc::new(Mutex::new(BTreeMap::new())) }
+        FileDevice { storage: store, buffered_files: Arc::new(Mutex::new(BTreeMap::new())),
+            database: database.clone() }
     }
 
     /// Returns content of the file as vector of bytes
@@ -148,6 +151,10 @@ impl FileDevice {
     fn get_list(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
+            if !self.database.has_access_to_group(username, DEV_GROUPS[Devices::Filer as usize][Groups::Write as usize].unwrap())
+                .unwrap_or(false) {
+                return Err("No storage for current user and no access for creating it".to_string());
+            }
             match fs::create_dir(&filepath) {
                 Ok(_) => (),
                 Err(err) => return Err(format!("No container was found and couldn't create new: {:?}", err))
