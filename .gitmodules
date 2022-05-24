@@ -1,0 +1,3 @@
+[submodule "kosecg"]
+	path = kosecg
+	url = git@github.com:thomasfire/kosecg.git
