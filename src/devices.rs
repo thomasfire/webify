@@ -8,6 +8,7 @@ pub enum Devices {
     Printer = 3,
     Blog = 4,
     Stat = 5,
+    ECG = 6,
     LEN,
 }
 
@@ -30,7 +31,8 @@ const DEVICE_ARRAY: [Devices; DEVICES_LEN] = [
     Devices::Root,
     Devices::Printer,
     Devices::Blog,
-    Devices::Stat
+    Devices::Stat,
+    Devices::ECG,
 ];
 
 
@@ -41,6 +43,7 @@ pub const DEV_NAMES: [&'static str; DEVICES_LEN] = [
     "printer",
     "blogdev",
     "statdev",
+    "ecgdev",
 ];
 
 pub const DEV_GROUPS: [[Option<&'static str>; GROUP_LEN]; DEVICES_LEN] = [
@@ -51,6 +54,7 @@ pub const DEV_GROUPS: [[Option<&'static str>; GROUP_LEN]; DEVICES_LEN] = [
     [None, Some("printer_read"), Some("printer_write"), Some("printer_request"), Some("printer_confirm"), Some("printer_dismiss")], // Printer device
     [None, Some("blogdev_read"), Some("blogdev_write"), Some("blogdev_request"), None, None], // Blog device
     [None, Some("statdev_read"), None, None, None, None], // Stat device
+    [None, Some("ecgdev_read"), None, None, None, None], // ECG device
 ];
 
 pub fn list_all_groups() -> Vec<String> {

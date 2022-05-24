@@ -12,6 +12,7 @@ use crate::config::Config;
 use crate::template_cache::TemplateCache;
 use crate::models::RejectReason;
 use crate::stat_device::StatDevice;
+use crate::ecg_device::EcgDevice;
 use crate::devices;
 
 use actix_identity::Identity;
@@ -70,6 +71,7 @@ struct Dispatch {
     printer_device: PrinterDevice,
     blog_device: BlogDevice,
     stat_device: StatDevice,
+    ecg_device: E
 }
 
 impl Dispatch {
@@ -81,6 +83,7 @@ impl Dispatch {
             root_device: RootDev::new(database),
             blog_device: BlogDevice::new(&config.redis_config, database, config.use_scraper),
             stat_device: StatDevice::new(database, config),
+            ecg_device: EcgDevice::new(config),
         }
     }
 
@@ -96,6 +99,7 @@ impl Dispatch {
             Ok(devices::Devices::Root) => Ok(&self.root_device),
             Ok(devices::Devices::Blog) => Ok(&self.blog_device),
             Ok(devices::Devices::Stat) => Ok(&self.stat_device),
+            Ok(devices::Devices::ECG) => Ok(&self.ecg_device),
             _ => Err("No such device".to_string())
         }
     }

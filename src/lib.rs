@@ -23,3 +23,4 @@ pub mod autoban_service;
 pub mod news_payload_parser;
 pub mod shikimori_scraper;
 pub mod template_cache;
+pub mod ecg_device;
