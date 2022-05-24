@@ -71,7 +71,7 @@ struct Dispatch {
     printer_device: PrinterDevice,
     blog_device: BlogDevice,
     stat_device: StatDevice,
-    ecg_device: E
+    ecg_device: EcgDevice,
 }
 
 impl Dispatch {

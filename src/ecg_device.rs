@@ -1,4 +1,3 @@
-use crate::database::get_random_token;
 use crate::device_trait::*;
 use crate::dashboard::QCommand;
 use crate::config::Config;
@@ -6,6 +5,7 @@ use crate::devices::{Devices, Groups, DEV_GROUPS};
 
 use serde_json::{Value as jsVal, json, from_str as js_from_str};
 use reqwest;
+use log::{debug};
 
 
 #[derive(Clone)]
@@ -35,15 +35,17 @@ impl DeviceRead for EcgDevice {
         let body = reqwest::blocking::get(lnurl)
             .map_err(|err| { format!("Reqwest to ECG server failed at article: {:?}", err) })?.text()
             .map_err(|err| { format!("Reqwest to ECG server failed at article: {:?}", err) })?;
-        let js_body: jsVal =  js_from_str(&body).unwrap_or(json!([]));
+        let js_body: jsVal = js_from_str(&body).unwrap_or(json!([]));
 
         if !js_body.is_object() {
             return Err("Responce from ECG server is not a valid JSON object".to_string());
         }
+
         Ok(json!({
             "template": "ecg_webapp.hbs",
-            "username": query.username,
-            "server": self.server_add.clone(),
+            "username": query.username.clone(),
+            "server": self.server_addr.clone(),
+            "file": query.payload.clone(),
             "data": js_body,
         }))
     }
@@ -58,14 +60,16 @@ impl DeviceRead for EcgDevice {
             .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?;
         let js_body: jsVal =  js_from_str(&body).unwrap_or(json!([]));
 
-       if !js_body.is_array() {
-           return Err("Responce from ECG server is not a valid JSON array".to_string());
-       }
+        debug!("got: {}", body);
+        if !js_body.is_array() {
+            return Err("Response from ECG server is not a valid JSON array".to_string());
+        }
 
+        debug!("JSON: {}", js_body.to_string());
         Ok(json!({
             "template": "ecg_status.hbs",
             "username": query.username,
-            "server": self.server_add.clone(),
+            "server": self.server_addr.clone(),
             "entries": js_body,
         }))
     }

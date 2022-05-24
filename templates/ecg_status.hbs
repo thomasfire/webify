@@ -1,0 +1,17 @@
+Files at {{server}} <br>
+{{#each entries as |entry|}}
+    <div class="linked_form">
+        <form action="/dashboard/ecgdev" method="post" id="ecg_choose{{entry}}">
+            <div class="command_f">
+                <input type="hidden" name="qtype" value="R" class="qtype">
+                <input type="hidden" name="group" value="ecgdev_read" class="group">
+                <input type="hidden" name="username" value="{{../username}}" class="username">
+                <input type="hidden" name="command" value="read" class="command">
+                <input type="hidden" name="payload"
+                       value="{{entry}}"
+                       class="payload">
+            </div>
+            <a href="#" onclick="document.getElementById('ecg_choose{{entry}}').submit();">{{entry}}</a>
+        </form>
+    </div>
+{{/each}}
