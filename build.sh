@@ -2,7 +2,7 @@
 
 DIR="$(dirname "$0")"
 
-cmake -S kosecg/server -B build
+cmake -S ecg_server -B build
 cmake --build build
 
 if cargo "$@"; then

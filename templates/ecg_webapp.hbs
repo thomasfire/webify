@@ -9,26 +9,64 @@
     var dps = [];
     var dataPointsArray = [{{#each data/data as |sample|}}{{sample}},{{/each}}];
     var color = "#f88888";
+
     var chart = new CanvasJS.Chart("chartContainer", {
         theme: "light2",
-        title:{text:"ECG", horizontalAlign: "left", fontColor: color},
-        subtitles:[{text: "File {{file}} from {{server}}", horizontalAlign: "left",}],
-        axisY:{stripLines:yAxisStripLinesArray, gridColor: color, lineColor: color, tickThickness: 0, labelFormatter: function(e){return "";}},
-        axisX:{stripLines:xAxisStripLinesArray, gridColor: color, lineColor: color, tickThickness: 0, labelFormatter: function(e){return "";}},
-        data: [{type: "spline", color:"black", dataPoints: dps}]});
+        title:{
+            text:"ECG",
+            horizontalAlign: "left",
+            fontColor: color
+        },
+        subtitles:[{
+            text: "File {{file}} from {{server}}",
+            horizontalAlign: "left",
+        }],
+        axisY:{
+            stripLines:yAxisStripLinesArray,
+            gridColor: color,
+            lineColor: color,
+            tickThickness: 0,
+            labelFormatter: function(e){
+                return "";
+            }
+        },
+        axisX:{
+            stripLines:xAxisStripLinesArray,
+            gridColor: color,
+            lineColor: color,
+            tickThickness: 0,
+            labelFormatter: function(e){
+                return "";
+            }
+        },
+        data: [
+            {
+                type: "spline",
+                color:"black",
+                dataPoints: dps
+            }
+        ]
+    });
+
     addDataPoints(chart);
     addStripLines(chart);
+
     function addDataPoints(chart){
-        for(var i = 0; i < dataPointsArray.length; i++) dps.push({y: dataPointsArray[i]});
+        for(var i = 0; i < dataPointsArray.length; i++){
+            dps.push({y: dataPointsArray[i]});
+        }
         chart.render();
     }
+
     function addStripLines(chart){
         //StripLines
         for(var i = chart.axisY[0].minimum;i < chart.axisY[0].maximum;i = i+(chart.axisY[0].interval/10)){
-            if(i%chart.axisY[0].interval != 0) yAxisStripLinesArray.push({value:i,thickness:0.5, color: color});
+            if(i%chart.axisY[0].interval != 0)
+                yAxisStripLinesArray.push({value:i,thickness:0.5, color: color});
         }
         for(var i = chart.axisX[0].minimum;i < chart.axisX[0].maximum; i = i+(chart.axisX[0].interval/10)){
-            if(i%chart.axisX[0].interval != 0) xAxisStripLinesArray.push({value:i,thickness:0.5, color: color});
+            if(i%chart.axisX[0].interval != 0)
+                xAxisStripLinesArray.push({value:i,thickness:0.5, color: color});
         }
         chart.render();
     }
@@ -38,6 +76,5 @@
 <h3>Processed data:</h3><br>
 Errors: {{data/errors}}<br>
 Low pressure warnings: {{data/low_pressure}}<br>
-Overload warnings: {{data/low_pressure}}<br>
 Irregular heartbeat warnigns: {{data/irregular_heartbeat}}<br>
 Pulse range: {{data/pulse_min}} - {{data/pulse_max}}<br>
