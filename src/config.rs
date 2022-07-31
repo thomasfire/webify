@@ -20,6 +20,7 @@ pub struct Config {
     pub period_to_request_s: u32,
     pub autoban_period_s: u32,
     pub autoban_anomaly_factor: f64,
+    pub ecg_server: String
 }
 
 pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
@@ -107,6 +108,7 @@ pub fn setup() {
     let period_to_request = io_tools::read_std_line("Period of the statistics (0 to disable): ").parse::<u32>().unwrap();
     let autoban_s = io_tools::read_std_line("Period of the autoban worker (0 to disable): ").parse::<u32>().unwrap();
     let anomaly_f = io_tools::read_std_line("Factor for detecting anomalies via autoban (0 to disable): ").parse::<f64>().unwrap();
+    let ecg_server = io_tools::read_std_line("Enter ECG server URL (eg https://127.0.0.1:8080/): ");
 
     println!("\nHere is your printers:\n{}\n", PrinterDevice::get_printers());
     let m_printer = io_tools::read_std_line("Enter name of the printer: ");
@@ -122,6 +124,7 @@ pub fn setup() {
         period_to_request_s: period_to_request,
         autoban_period_s: autoban_s,
         autoban_anomaly_factor: anomaly_f,
+        ecg_server,
         use_scraper
     }, DEFAULT_CONFIG_PATH) {
         Ok(_) => println!("Ok"),
