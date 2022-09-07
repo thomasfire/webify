@@ -44,7 +44,7 @@ impl BlogDevice {
         }
     }
 
-    fn new_post(&self, _username: &str, payload: &str) -> Result<jsVal, String> {
+    fn new_post(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let post: NewsPostParsed = match parse_post(payload) {
             Ok(val) => val,
             Err(err) => return Err(format!("Invalid post: {}", err))
@@ -72,10 +72,7 @@ impl BlogDevice {
             .clear();
         *(self.cache_last_synced.write()
             .map_err(|err| format!("Error on clearing sync timestamp: {:?}", err))?) = 0;
-        Ok(json!({
-            "template": "simple_message.hbs",
-            "message": "OK",
-        }))
+        self.get_post(username, &format!("{}", curr_id))
     }
 
     fn shownew_post(&self, username: &str, _payload: &str) -> Result<jsVal, String> {
@@ -116,7 +113,7 @@ impl BlogDevice {
         }))
     }
 
-    fn new_cmm(&self, username: &str, payload: &str) -> Result<String, String> {
+    fn new_cmm(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let cmm_parsed = parse_cmm(payload)?;
         let mut curr_conn = match self.conn_pool.get() {
             Ok(val) => val,
@@ -130,7 +127,7 @@ impl BlogDevice {
                                     format!(r#"{{"username": "{}", "timestamp": "{}", "text": "{}"}}"#,
                                             username, cmm_parsed.date, cmm_parsed.text)).map_err(|err| { format!("Redis err: {:?}", err) })?;
 
-        Ok("OK".to_string())
+        self.get_post(username, &format!("{}", cmm_parsed.post_id))
     }
 
     fn get_list_of_posts(&self, username: &str) -> Result<jsVal, String> {
@@ -229,16 +226,10 @@ impl DeviceRequest for BlogDevice {
             return Err("No access to this action".to_string());
         }
 
-
         match command {
             "createcmm" => self.new_cmm(&query.username, &query.payload),
             _ => return Err(format!("Unknown for BlogDevice.read command: {}", command))
-        }.map(|data| {
-            json!({
-                "template": "simple_message.hbs",
-                "message": data
-            })
-        })
+        }
     }
 }
 

@@ -4,7 +4,7 @@ use crate::io_tools;
 use crate::database::{init_db, get_connection, insert_user};
 use crate::printer_device::{PrinterDevice, PRINTER_CONFIG_PATH, PrinterConfig};
 use crate::devices::list_all_groups;
-use serde::{Serialize, Deserialize};
+use serde::{Serialize};
 use serde::de::DeserializeOwned;
 use secstr::SecStr;
 
