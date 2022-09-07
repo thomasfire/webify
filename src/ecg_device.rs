@@ -7,6 +7,8 @@ use serde_json::{Value as jsVal, json, from_str as js_from_str};
 use reqwest;
 use log::{debug};
 
+use std::thread;
+
 
 #[derive(Clone)]
 pub struct EcgDevice {
@@ -32,9 +34,15 @@ impl DeviceRead for EcgDevice {
         };
 
         let lnurl = format!("{}/{}", self.server_addr.strip_suffix("/").unwrap_or(""), query.payload);
-        let body = reqwest::blocking::get(lnurl)
-            .map_err(|err| { format!("Reqwest to ECG server failed at article: {:?}", err) })?.text()
-            .map_err(|err| { format!("Reqwest to ECG server failed at article: {:?}", err) })?;
+
+        let body = thread::spawn(move || {
+            Ok(reqwest::blocking::get(lnurl)
+                .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?.text()
+                .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?)
+        }).join()
+            .map_err(|err| { format!("Reqwest to ECG server failed at article: {:?}", err) })?
+            .map_err(|err: String| { format!("Reqwest to ECG server failed at article: {}", err) })?;
+
         let js_body: jsVal = js_from_str(&body).unwrap_or(json!([]));
 
         if !js_body.is_object() {
@@ -55,10 +63,15 @@ impl DeviceRead for EcgDevice {
             return Err("No access to this action".to_string());
         }
         let lnurl = format!("{}/list", self.server_addr.strip_suffix("/").unwrap_or(""));
-        let body = reqwest::blocking::get(lnurl)
-            .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?.text()
-            .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?;
-        let js_body: jsVal =  js_from_str(&body).unwrap_or(json!([]));
+
+        let body = thread::spawn(move || {
+            Ok(reqwest::blocking::get(lnurl)
+                .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?.text()
+                .map_err(|err| { format!("Reqwest to ECG server failed at request: {:?}", err) })?)
+        }).join()
+            .map_err(|err| { format!("Reqwest to ECG server failed at article: {:?}", err) })?
+            .map_err(|err: String| { format!("Reqwest to ECG server failed at article: {:?}", err) })?;
+        let js_body: jsVal = js_from_str(&body).unwrap_or(json!([]));
 
         debug!("got: {}", body);
         if !js_body.is_array() {
