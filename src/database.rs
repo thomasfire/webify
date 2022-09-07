@@ -128,10 +128,10 @@ impl Database {
             Err(_) => ()
         };
 
-        let connection = self.sql_pool.get().map_err(|err| format!("Error on get_user_groups: {:?}", err))?;
+        let mut connection = self.sql_pool.get().map_err(|err| format!("Error on get_user_groups: {:?}", err))?;
 
         let res: User = match users::table.filter(users::columns::name.eq(username))
-            .first::<User>(&connection) {
+            .first::<User>(&mut connection) {
             Ok(r) => r,
             Err(e) => {
                 error!("Error on getting user devices (get_user_groups): {:?}", e);
@@ -191,7 +191,7 @@ impl Database {
 
     /// Returns vector of all users as they are represented in the database
     pub fn get_all_users(&self) -> Result<Vec<User>, String> {
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -199,7 +199,7 @@ impl Database {
             Err(err) => return Err(format!("Error on get_all_users (connection): {:?}", err)),
         };
 
-        let users: Vec<User> = match users::table.load::<User>(&connection) {
+        let users: Vec<User> = match users::table.load::<User>(&mut connection) {
             Ok(d) => d,
             Err(e) => return Err(format!("Error on loading users: {:?}", e)),
         };
@@ -209,7 +209,7 @@ impl Database {
 
     /// Returns vector of all history records as they are represented in the database
     pub fn get_all_history(&self) -> Result<Vec<History>, String> {
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -218,7 +218,7 @@ impl Database {
         };
 
 
-        let hist: Vec<History> = match history::table.order(history::columns::id.desc()).limit(100).load::<History>(&connection) {
+        let hist: Vec<History> = match history::table.order(history::columns::id.desc()).limit(100).load::<History>(&mut connection) {
             Ok(d) => d,
             Err(e) => return Err(format!("Error on loading history: {:?}", e)),
         };
@@ -241,7 +241,7 @@ impl Database {
     /// Inserts new group to the databse
     pub fn insert_history(&self, username: &str, device: &str, command: &str, qtype: &str, rejected: i32) -> Result<(), String> {
         validate_username(username)?;
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -253,7 +253,7 @@ impl Database {
 
         match diesel::insert_into(history::table)
             .values(entry)
-            .execute(&connection) {
+            .execute(&mut connection) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error on update_user_pass (update): {:?}", err))
         }
@@ -263,7 +263,7 @@ impl Database {
     pub fn update_user_pass(&self, username: &str, password: &SecStr) -> Result<(), String> {
         validate_password(password)?;
         validate_username(username)?;
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -274,7 +274,7 @@ impl Database {
 
         match diesel::update(users::table.filter(users::columns::name.eq(username)))
             .set(users::columns::password.eq(get_hash(password)))
-            .execute(&connection) {
+            .execute(&mut connection) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error on update_user_pass (update): {:?}", err))
         }
@@ -282,7 +282,7 @@ impl Database {
 
     /// Updates password for the user to the databse
     pub fn update_users_ban(&self, usernames: &Vec<String>) -> Result<(), String> {
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -297,7 +297,7 @@ impl Database {
 
         match diesel::update(users::table.filter(users::columns::name.eq_any(usernames)))
             .set(users::columns::password.eq(""))
-            .execute(&connection) {
+            .execute(&mut connection) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error on update_user_ban (update): {:?}", err))
         }
@@ -306,7 +306,7 @@ impl Database {
     /// Writes groups for the user to the database
     pub fn update_user_group(&self, username: &str, group: &str) -> Result<(), String> {
         validate_username(username)?;
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -317,7 +317,7 @@ impl Database {
         self.delete_user_from_cache(username)?;
         match diesel::update(users::table.filter(users::columns::name.eq(username)))
             .set(users::columns::groups.eq(group))
-            .execute(&connection) {
+            .execute(&mut connection) {
             Ok(_) => Ok(()),
             Err(err) => Err(format!("Error on update_user_group (update): {:?}", err))
         }
@@ -394,7 +394,7 @@ impl Database {
         };
 
         if user.is_none() {
-            let connection = match self.sql_pool.get() {
+            let mut connection = match self.sql_pool.get() {
                 Ok(conn) => {
                     debug!("Got connection");
                     conn
@@ -403,7 +403,7 @@ impl Database {
             };
 
             user = match users::table.filter(users::columns::name.eq(username))
-                .first::<User>(&connection) {
+                .first::<User>(&mut connection) {
                 Ok(d) => Some(d),
                 Err(e) => {
                     if e == dError::NotFound {
@@ -469,7 +469,7 @@ impl Database {
     }
 
     pub fn load_stats_by_query(&self, query: &str) -> Result<Vec<StatEntry>, String> {
-        let connection = match self.sql_pool.get() {
+        let mut connection = match self.sql_pool.get() {
             Ok(conn) => {
                 debug!("Got connection");
                 conn
@@ -478,7 +478,7 @@ impl Database {
         };
 
         let hist: Vec<StatEntry> = diesel::sql_query(query)
-            .load(&connection)
+            .load(&mut connection)
             .expect("Query failed");
 
         Ok(hist)
@@ -489,7 +489,7 @@ impl Database {
 pub fn insert_user(pool: &SQLPool, username: &str, password: &SecStr, groups: Option<&str>) -> Result<(), String> {
     validate_password(password)?;
     validate_username(username)?;
-    let connection = match pool.get() {
+    let mut connection = match pool.get() {
         Ok(conn) => {
             debug!("Got connection");
             conn
@@ -509,7 +509,7 @@ pub fn insert_user(pool: &SQLPool, username: &str, password: &SecStr, groups: Op
 
     match diesel::insert_into(users::table)
         .values(&new_user)
-        .execute(&connection) {
+        .execute(&mut connection) {
         Ok(_) => Ok(()),
         Err(err) => Err(format!("Error on inserting users (insert): {:?}", err))
     }
@@ -547,7 +547,7 @@ pub fn init_db(db_config: &String) -> Result<(), String> {
         Err(err) => return Err(format!("Error on init_db: {}", err)),
     };
 
-    let connection = match pool.get() {
+    let mut connection = match pool.get() {
         Ok(conn) => {
             debug!("Got connection");
             conn

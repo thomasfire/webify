@@ -1,4 +1,3 @@
-extern crate actix_identity;
 extern crate actix_web;
 extern crate actix_form_data;
 
@@ -14,9 +13,9 @@ use crate::models::RejectReason;
 use crate::stat_device::StatDevice;
 use crate::ecg_device::EcgDevice;
 use crate::devices;
+use crate::server::AUTH_COOKIE;
 
-use actix_identity::Identity;
-use actix_web::{Error, HttpResponse, web, error, http};
+use actix_web::{Error, HttpResponse, web, error, http, HttpRequest};
 use futures::StreamExt;
 use serde_json::Value as jsVal;
 use serde_json::json;
@@ -220,17 +219,17 @@ pub async fn dashboard_reload_templates(_mdata: web::Data<DashBoard<'_>>) -> Res
 }
 
 /// Handles empty request to the dashboard
-pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
-    let cookie = match id.identity() {
-        Some(data) => data,
-        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+pub async fn dashboard_page(req: HttpRequest, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
+    let cookie = match req.cookie(AUTH_COOKIE) {
+        Some(data) => data.value().to_string(),
+        None => return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish()),
     };
 
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             warn!("Error in dashboard_page at getting the user: {:?}", e);
-            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish());
         }
     };
     let inner_info = get_available_info(&mdata, &user, info.as_str());
@@ -255,18 +254,18 @@ pub async fn dashboard_page(id: Identity, info: web::Path<String>, mdata: web::D
 }
 
 /// Handles the QCommand requests
-pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
+pub async fn dashboard_page_req(req: HttpRequest, info: web::Path<String>,
                                 form: web::Form<QCommand>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
-    let cookie = match id.identity() {
-        Some(data) => data,
-        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+    let cookie = match req.cookie(AUTH_COOKIE) {
+        Some(data) => data.value().to_string(),
+        None => return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish()),
     };
 
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             error!("Error in dashboard_page_req at getting the user: {:?}", e);
-            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish());
         }
     };
 
@@ -303,18 +302,18 @@ pub async fn dashboard_page_req(id: Identity, info: web::Path<String>,
 }
 
 /// Sends needed file to the user after security checks
-pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
+pub async fn file_sender(req: HttpRequest, info: web::Path<String>, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
     trace!("File transfer");
-    let cookie = match id.identity() {
-        Some(data) => data,
-        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+    let cookie = match req.cookie(AUTH_COOKIE) {
+        Some(data) => data.value().to_string(),
+        None => return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish()),
     };
 
     let user = match mdata.database.get_user_from_cookie(&cookie) {
         Ok(data) => data,
         Err(e) => {
             error!("Error in file_sender at getting the user: {:?}", e);
-            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish());
         }
     };
 
@@ -329,30 +328,31 @@ pub async fn file_sender(id: Identity, info: web::Path<String>, mdata: web::Data
                 Ok(htmld) => return Ok(HttpResponse::BadRequest().body(htmld)),
                 Err(err) => {
                     error!("Error on rendering template: {}", err);
-                    return Ok(HttpResponse::InternalServerError().body("Internal error")); }
+                    return Ok(HttpResponse::InternalServerError().body("Internal error"));
+                }
             }
         }
     };
 
     debug!("File size: {}", file_data.len());
-    Ok(HttpResponse::Ok().set_header(http::header::CONTENT_TYPE, "multipart/form-data")
-        .set_header(http::header::CONTENT_LENGTH, file_data.len())
-        .set_header(http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", info.as_str().split("%2F").collect::<Vec<&str>>().pop().unwrap_or("some_file")))
+    Ok(HttpResponse::Ok().insert_header((http::header::CONTENT_TYPE, "multipart/form-data"))
+        .insert_header((http::header::CONTENT_LENGTH, file_data.len()))
+        .insert_header((http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", info.as_str().split("%2F").collect::<Vec<&str>>().pop().unwrap_or("some_file"))))
         .body(file_data))
 }
 
 /// Page for uploading the file
-pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: web::Path<String>) -> Result<HttpResponse, Error> {
-    let cookie = match id.identity() {
-        Some(data) => data,
-        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+pub async fn upload_index(req: HttpRequest, mdata: web::Data<DashBoard<'_>>, info: web::Path<String>) -> Result<HttpResponse, Error> {
+    let cookie = match req.cookie(AUTH_COOKIE) {
+        Some(data) => data.value().to_string(),
+        None => return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish()),
     };
 
     let user = match mdata.database.get_user_from_cookie(&cookie) {
-        Ok(data) => data,
+        Ok(data) => data.to_string(),
         Err(e) => {
             error!("Error in upload_index at getting the user: {:?}", e);
-            return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish());
+            return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish());
         }
     };
 
@@ -379,9 +379,9 @@ pub async fn upload_index(id: Identity, mdata: web::Data<DashBoard<'_>>, info: w
 }
 
 /// Handles the upload requests
-pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<DashBoard<'_>>, info: web::Path<String>) -> Result<HttpResponse, Error> {
-    let cookie = match id.identity() {
-        Some(data) => data,
+pub async fn uploader(req: HttpRequest, mut multipart: Multipart, mdata: web::Data<DashBoard<'_>>, info: web::Path<String>) -> Result<HttpResponse, Error> {
+    let cookie = match req.cookie(AUTH_COOKIE) {
+        Some(data) => data.value().to_string(),
         None => return Err(error::ErrorUnauthorized("Unauthorized")),
     };
 
@@ -411,12 +411,9 @@ pub async fn uploader(id: Identity, mut multipart: Multipart, mdata: web::Data<D
             Ok(f) => f,
             Err(e) => return Err(error::ErrorBadRequest(format!("Bad item: {:?}", e)))
         };
-        let file_path_string = match field.content_disposition() {
-            Some(c_d) => match c_d.get_filename() {
-                Some(filename) => filename.replace(' ', "_").to_string(),
-                None => return Err(error::ErrorBadRequest("No filename in content-disposition"))
-            },
-            None => return Err(error::ErrorBadRequest("No content-disposition"))
+        let file_path_string = match field.content_disposition().get_filename() {
+            Some(filename) => filename.replace(' ', "_").to_string(),
+            None => return Err(error::ErrorBadRequest("No filename in content-disposition"))
         };
         let directory = info.to_string().replace("%2F", "/");
         let full_path = format!("{}/{}", directory, file_path_string);

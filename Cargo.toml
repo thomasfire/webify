@@ -1,34 +1,35 @@
 [package]
 name = "webify"
-version = "0.6.0-beta"
+version = "0.7.0-beta"
 authors = ["thomasfire <tomasfire@live.com>"]
 edition = "2018"
 
 [dependencies]
-actix-web = { version = "3.3.*", features=["rustls"] }
-actix-identity = "0.3.*"
-actix-form-data = "0.5.*"
-actix-multipart = "0.3.*"
-actix-rt = "1.1.*"
+actix-web = { version = "4.1.0", features = ["rustls"] }
+actix-form-data = "0.6.2"
+actix-multipart = "0.4.0"
+actix-rt = "2.7.0"
+cookie = "0.16.0"
 toml = "0.5.*"
 serde_derive = "1.0.*"
-serde_json = { version="1.0", git="https://github.com/thomasfire/json.git" }
+serde_json = { version = "1.0.*", git = "https://github.com/thomasfire/json.git" }
 serde = "1.0.*"
-diesel = { version = "1.4.8", features = ["sqlite", "r2d2", "chrono"] }
+diesel = { version = "2.0.0", features = ["sqlite", "r2d2", "chrono"] }
 chrono = "0.4.*"
 futures = "0.3.*"
 rust-crypto = "0.2.*"
 rand = "0.8.*"
 flate2 = "1.0.*"
-rustls = "0.18.1"
-redis = { version = "0.20.*", features = ["r2d2"] }
-r2d2_redis = "0.14.*"
-regex = "1.5.*"
-scraper = "0.12.*"
+rustls = "0.20.6"
+rustls-pemfile = "1.0.1"
+redis = { version = "0.21.6", features = ["r2d2"] }
+r2d2_redis = { git = "https://github.com/thomasfire/r2d2-redis.git", version = "0.14.1-alpha.0" }
+regex = "1.6.0"
+scraper = "0.13.0"
 reqwest = { version = "0.11.*", features = ["blocking"] }
-handlebars = "4.1.*"
+handlebars = "4.3.3"
 env_logger = "0.9.*"
 log = "0.4.*"
-phf = { version = "0.10.*", features = ["macros"] }
-secstr = { version = "0.4.*", features = ["serde"] }
+phf = { version = "0.11.1", features = ["macros"] }
+secstr = { version = "0.5.0", features = ["serde"] }
 rustc-serialize = "0.3.24"

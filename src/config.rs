@@ -20,7 +20,7 @@ pub struct Config {
     pub period_to_request_s: u32,
     pub autoban_period_s: u32,
     pub autoban_anomaly_factor: f64,
-    pub ecg_server: String
+    pub ecg_server: String,
 }
 
 pub static DEFAULT_CONFIG_PATH: &str = "config.toml";
@@ -68,6 +68,7 @@ pub fn read_config<T: Serialize + DeserializeOwned + Clone>(conf_path: &str) -> 
 ///     bind_address: String::from("127.0.0.1:2280"),
 ///     redis_config: String::from("redis://127.0.0.1:6379/"),
 ///     redis_cache: String::from("redis://127.0.0.1:6380/"),
+///     ecg_server: String::from("redis://127.0.0.1:8080/"),
 ///     general_stat_period_s: 3600,
 ///     cross_user_stat_period_s: 3600,
 ///     period_to_request_s: 2592000,
@@ -125,7 +126,7 @@ pub fn setup() {
         autoban_period_s: autoban_s,
         autoban_anomaly_factor: anomaly_f,
         ecg_server,
-        use_scraper
+        use_scraper,
     }, DEFAULT_CONFIG_PATH) {
         Ok(_) => println!("Ok"),
         Err(err) => panic!("{:?}", err),

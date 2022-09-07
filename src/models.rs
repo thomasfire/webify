@@ -11,6 +11,7 @@ pub enum RejectReason {
     NoAuth = 1,
     Error = 2,
 }
+
 const REJECTED_REASON: &'static [&'static str] = &[
     "OK",
     "NOT AUTHORIZED",
@@ -29,7 +30,8 @@ pub trait LineWebify {
 pub struct User {
     pub id: i32,
     pub name: String,
-    pub password: String, // It's probably okay because it remains hashed
+    pub password: String,
+    // It's probably okay because it remains hashed
     pub groups: String,
 }
 
@@ -45,7 +47,7 @@ impl LineWebify for User {
 }
 
 #[derive(Deserialize, Insertable)]
-#[table_name = "users"]
+#[diesel(table_name = users)]
 pub struct UserAdd<'a> {
     pub name: &'a str,
     pub password: &'a str,
@@ -66,10 +68,10 @@ pub struct History {
 
 #[derive(Queryable, QueryableByName, Clone)]
 pub struct StatEntry {
-    #[sql_type = "Text"]
+    #[diesel(sql_type = Text)]
     pub label: String,
-    #[sql_type = "Integer"]
-    pub counter: i32
+    #[diesel(sql_type = Integer)]
+    pub counter: i32,
 }
 
 impl LineWebify for History {
@@ -92,7 +94,7 @@ impl LineWebify for History {
 
 
 #[derive(Deserialize, Insertable)]
-#[table_name = "history"]
+#[diesel(table_name = history)]
 pub struct HistoryForm<'a> {
     pub username: &'a str,
     pub device: &'a str,

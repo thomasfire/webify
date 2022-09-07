@@ -6,18 +6,20 @@ use crate::database::get_random_token;
 use crate::config::Config;
 use crate::file_cache::FileCache;
 
-use actix_identity::{CookieIdentityPolicy, IdentityService};
-use actix_identity::Identity;
-use actix_web::{App, HttpResponse, HttpServer, middleware, web};
+use cookie::Cookie;
+use actix_web::{App, HttpResponse, HttpServer, middleware, web, cookie, HttpRequest};
 use log::{debug, error};
 use actix_web::{Error, http};
-use rustls::internal::pemfile::{certs, rsa_private_keys};
-use rustls::{NoClientAuth, ServerConfig};
+use rustls_pemfile;
+use rustls::server::ServerConfig;
+use rustls::{Certificate, PrivateKey};
 use secstr::SecStr;
 
 use std::sync::{Arc, Mutex};
 use std::fs::File;
 use std::io::BufReader;
+
+pub const AUTH_COOKIE: &'static str = "authid";
 
 fn get_static_file(info: &str, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     let static_str = match mdata.get_ref().clone().get_str_file(info) {
@@ -44,11 +46,11 @@ fn get_static_file_raw(info: &str, mdata: web::Data<FileCache>) -> Result<HttpRe
 }
 
 async fn responce_static_file_raw(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
-    get_static_file_raw(&info.0, mdata)
+    get_static_file_raw(&info.into_inner(), mdata)
 }
 
 async fn responce_static_file(info: web::Path<String>, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
-    get_static_file(&info.0, mdata)
+    get_static_file(&info.into_inner(), mdata)
 }
 
 /// Info, used in the auth form when logging in
@@ -60,8 +62,8 @@ struct LoginInfo {
 
 
 /// Handles login requests when LoginInfo has been already sent
-async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Data<DashBoard<'_>>, f_cache: web::Data<FileCache>) -> Result<HttpResponse, Error> {
-    debug!("login_handler: {:?}", id.identity());
+async fn login_handler(req: HttpRequest, form: web::Form<LoginInfo>, mdata: web::Data<DashBoard<'_>>, f_cache: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+    debug!("login_handler: {:?}", req.cookie(AUTH_COOKIE));
 
     let nick = form.username.clone();
     let password = SecStr::from(form.password.as_str());
@@ -79,7 +81,7 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
     }
 
     let token = get_random_token();
-    id.remember(token.clone());
+    let cookie = Cookie::new(AUTH_COOKIE, &token);
 
     match mdata.database.assign_cookie(&nick, &token) {
         Ok(_) => { debug!("New login: `{}` -> `{}`", nick, token) }
@@ -88,29 +90,32 @@ async fn login_handler(form: web::Form<LoginInfo>, id: Identity, mdata: web::Dat
         }
     };
 
-    get_static_file("login_success.html", f_cache)
+    get_static_file("login_success.html", f_cache).map(|mut resp| {
+        resp.add_cookie(&cookie).map_err(|err| {
+            error!("Error in adding cookies: {:?}", err);
+        }).unwrap_or(());
+        resp
+    })
 }
 
-async fn logout_handler(id: Identity, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
-    let cookie = match id.identity() {
-        Some(data) => data,
-        None => return Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/login").finish()),
+async fn logout_handler(req: HttpRequest, mdata: web::Data<DashBoard<'_>>) -> Result<HttpResponse, Error> {
+    let cookie = match req.cookie(AUTH_COOKIE) {
+        Some(data) => data.value().to_string(),
+        None => return Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/login")).finish()),
     };
 
-    id.forget();
-
     match mdata.database.remove_cookie(&cookie) {
-        Ok(_) => { debug!("Logout {}", cookie) }
+        Ok(_) => { debug!("Logout {}", &cookie) }
         Err(e) => {
             error!("Error on removing cookies: {}", e);
         }
     };
 
-    Ok(HttpResponse::TemporaryRedirect().header(http::header::LOCATION, "/main").finish())
+    Ok(HttpResponse::TemporaryRedirect().append_header((http::header::LOCATION, "/main")).finish())
 }
 
 /// Returns standard login page with form for signing in
-async fn login_page(_id: Identity, mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
+async fn login_page(mdata: web::Data<FileCache>) -> Result<HttpResponse, Error> {
     get_static_file("login.html", mdata)
 }
 
@@ -145,27 +150,33 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
     };
     let stat_files = FileCache::new();
 
-    let mut config_tls = ServerConfig::new(NoClientAuth::new());
+    //let mut config_tls = ServerConfig::new(NoClientAuth::new());
     let cert_file = &mut BufReader::new(File::open("cert.pem").unwrap());
     let key_file = &mut BufReader::new(File::open("key.pem").unwrap());
 
-    let cert_chain = certs(cert_file).unwrap();
-    let mut keys = rsa_private_keys(key_file).unwrap();
+    let cert_chain = rustls_pemfile::certs(cert_file).unwrap();
+    let keys = rustls_pemfile::rsa_private_keys(key_file).unwrap();
 
-    config_tls.set_single_cert(cert_chain, keys.remove(0)).unwrap();
+    //config_tls.set_single_cert(cert_chain, keys.remove(0)).unwrap();
+
+    let config_tls = ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(vec![Certificate { 0: cert_chain[0].clone() }], PrivateKey { 0: keys[0].clone() })
+        .unwrap();
 
     HttpServer::new(move || {
         App::new()
-            .wrap(IdentityService::new(
-                CookieIdentityPolicy::new(&[0; 32])
-                    .name("auth-id")
-                    .secure(false),
-            ))
+            /*.wrap(SessionMiddleware::new(
+                Cook::new("127.0.0.1:6379"),
+                signing_key.clone(),
+            ))*/
             // enable logger - always register actix-web Logger middleware last
+            .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::Logger::new("%T sec  from %a `%r` -> `%s` %b `%{Referer}i` `%{User-Agent}i`"))
             .wrap(middleware::Compress::default())
-            .data(ds.clone())
-            .data(stat_files.clone())
+            .app_data(web::Data::new(ds.clone()))
+            .app_data(web::Data::new(stat_files.clone()))
             .service(web::resource("/main").to(main_page))
             .service(web::resource("/").to(main_page))
             .service(web::resource("/login").to(login_page))
