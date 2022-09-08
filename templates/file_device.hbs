@@ -1,21 +1,132 @@
-{{#each entries as |entry|}}
-    {{#if entry.isfile}}
-        <div class="item"><a href="../download/{{../prepath_fx}}%2F{{entry.filename}}">{{entry.filename}}</a></div>
-    {{else}}
-        <div class="linked_form">
-            <form action="/dashboard/filer" method="post" id="dir_sender{{entry.display}}">
-                <div class="command_f">
-                    <input type="hidden" name="qtype" value="R" class="qtype">
-                    <input type="hidden" name="group" value="filer_read" class="group">
-                    <input type="hidden" name="username" value="{{../username}}" class="username">
-                    <input type="hidden" name="command" value="getlist" class="command">
-                    <input type="hidden" name="payload" value="{{entry.full_path}}" class="payload">
-                </div>
-                <a href="#" onclick="document.getElementById('dir_sender{{entry.display}}').submit();">{{entry.display}}</a>
-            </form>
-        </div>
-    {{/if}}
-{{/each}}
+<style>
+    .linked_form {
+        background: white;
+        width: 50%;
+        min-width: 400px;
+        font-family: sans-serif;
+        font-size: 13pt;
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+        border-radius: 3px;
+        line-height: 30px;
+        margin: 3px;
+    }
+    .linked_form a {
+        display: block;
+        height: 100%;
+        width: 100%;
+        text-decoration: none;
+        color: initial;
+        padding-left: 30px;
+    }
+    .linked_form:hover {
+        background: #f4f5ff;
+    }
+    .linked_form:nth-child(even) {
+        background: #f2fff2;
+    }
+    .linked_form:nth-child(even):hover {
+        background: #f2ffff;
+    }
+    .createnew_form a {
+        display: block;
+        width: 250px;
+        height: 40px;
+        line-height: 40px;
+        background: #7FFFD4FF;
+        border-radius: 5px;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+        text-decoration: none;
+        color: initial;
+    }
+    .createnew_form a:hover {
+        box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+    }
+    .createnew_form a:active {
+        background: rgba(127, 255, 212, 0.1);
+    }
+    .ico {
+        width:24px;
+        height:24px;
+        background-size:contain;
+        margin-left: -30px;
+        display: inline-block;
+        padding-right: 6px;
+        vertical-align: middle;
+    }
+    .download {background:url('/rstatic/download.svg'); background-size: contain; background-repeat: no-repeat;}
+    .upload {background:url('/rstatic/upload.svg'); background-size: contain; background-repeat: no-repeat;}
+    .folder {background:url('/rstatic/folder.svg'); background-size: contain; background-repeat: no-repeat;}
+    .create {background:url('/rstatic/create.svg'); background-size: contain; background-repeat: no-repeat;}
+
+    .uploader {
+        display: block;
+        max-width: 400px;
+        height: 150px;
+        line-height: 40px;
+        background: #D1FFF5;
+        border-radius: 5px;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        text-decoration: none;
+        color: initial;
+    }
+    .uploader .submitter {
+        display: block;
+        width: 75px;
+        height: 40px;
+        line-height: 40px;
+        background: #eef8ff;
+        border-radius: 5px;
+        border: none;
+        text-align: center;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        text-decoration: none;
+        color: initial;
+        vertical-align: middle;
+        transition: all 0.3s cubic-bezier(.25,.8,.25,1);
+        margin: 0 auto;
+    }
+    .uploader .submitter:hover {
+        box-shadow: 0 7px 14px rgba(0,0,0,0.25), 0 5px 5px rgba(0,0,0,0.22);
+    }
+    .uploader .submitter:active {
+        background: #98c1fa;
+    }
+    .createnew_form .payload {
+        border-radius: 3px;
+        border: none;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+        height: 24px;
+        font-size: 12pt;
+        width: 250px;
+    }
+</style>
+
+<div class="dir_list_block">
+    {{#each entries as |entry|}}
+        {{#if entry.isfile}}
+            <div class="linked_form">
+                <a href="../download/{{../prepath_fx}}%2F{{entry.filename}}"><div class="ico download"></div>{{entry.filename}}</a>
+            </div>
+        {{else}}
+            <div class="linked_form">
+                <form action="/dashboard/filer" method="post" id="dir_sender{{entry.display}}">
+                    <div class="command_f">
+                        <input type="hidden" name="qtype" value="R" class="qtype">
+                        <input type="hidden" name="group" value="filer_read" class="group">
+                        <input type="hidden" name="username" value="{{../username}}" class="username">
+                        <input type="hidden" name="command" value="getlist" class="command">
+                        <input type="hidden" name="payload" value="{{entry.full_path}}" class="payload">
+                    </div>
+                    <a href="#"
+                       onclick="document.getElementById('dir_sender{{entry.display}}').submit();"><div class="ico folder"></div>{{entry.display}}</a>
+                </form>
+            </div>
+        {{/if}}
+    {{/each}}
+</div>
 
 <br><br>
 <div class="createnew_form">
@@ -28,15 +139,16 @@
             <input type="text" name="payload" value="{{#if prepath}}{{prepath}}{{else}}.{{/if}}/" class="payload">
         </div>
         <div class="createnew_link">
-            <a href="#" onclick="document.getElementById('create_new').submit();">Create new dir</a>
+            <a href="#" onclick="document.getElementById('create_new').submit();"><div class="ico create"></div>Create new dir</a>
         </div>
     </form>
 </div>
 <br>
 <div class="uploader">
-    Upload a file<br>
-    <form target="../../upload/{{prepath_fx}}" action="../../upload/{{prepath_fx}}" method="post" enctype="multipart/form-data">
+    <div class="ico upload"></div> Upload a file<br>
+    <form target="../../upload/{{prepath_fx}}" action="../../upload/{{prepath_fx}}" method="post"
+          enctype="multipart/form-data">
         <input type="file" name="file"/><br>
-        <input type="submit" value="Senden">
+        <input type="submit" value="Upload" class="submitter">
     </form>
 </div>

@@ -26,7 +26,7 @@ pub mod web_device;
 5. Strong user access rights - easily define, what each user can perform
 
 ### Build and setup
-You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.54).
+You'll need the [Rust Lang](https://www.rust-lang.org/) compiler (at least 1.62).
 You can easily install it on Manjaro:
 ```shell script
 $ sudo pacman -S rust cargo openssl redis sqlite # for building only
