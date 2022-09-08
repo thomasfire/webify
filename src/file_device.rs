@@ -9,6 +9,7 @@ use serde_json::json;
 use flate2::read::{GzDecoder, GzEncoder};
 use flate2::Compression;
 use log::{debug, info};
+use urlencoding;
 
 use std::fs;
 use std::collections::BTreeMap;
@@ -35,18 +36,25 @@ impl FileDevice {
         if !exists(&store) {
             fs::create_dir(&store).unwrap();
         }
-        FileDevice { storage: store, buffered_files: Arc::new(Mutex::new(BTreeMap::new())),
-            database: database.clone() }
+        FileDevice {
+            storage: store,
+            buffered_files: Arc::new(Mutex::new(BTreeMap::new())),
+            database: database.clone(),
+        }
     }
 
     /// Returns content of the file as vector of bytes
     pub fn get_file(&self, username: &str, payload: &str) -> Result<Vec<u8>, String> {
         debug!("Trying to open the file");
+        if payload.contains("..") {
+            return Err("Forbidden path".to_string());
+        }
         let filepath = format!("{}/{}", &self.storage, username);
         if !exists(&filepath) {
             return Err("No container was found".to_string());
         }
-        let mut file = match fs::File::open(&format!("{}/{}", filepath, payload)) {
+        let mut file = match fs::File::open(
+            &format!("{}/{}", filepath, urlencoding::decode(payload).map_err(|_| { format!("Couldn't decode payload: `{}`", payload) })?)) {
             Ok(f) => f,
             Err(e) => return Err(format!("Error on opening the file: {:?}", e))
         };
@@ -74,7 +82,10 @@ impl FileDevice {
         if payload.contains("..") {
             return Err("Wrong symbols were supplied".to_string());
         }
-        let filepath = format!("{}/{}/{}", &self.storage, username, payload);
+        let filepath = format!("{}/{}/{}",
+                               &self.storage,
+                               username,
+                               urlencoding::decode(payload).map_err(|_| { format!("Couldn't decode payload: `{}`", payload) })?);
         self.buffered_files.lock()
             .map(move |mut x| {
                 match x.get_mut(&filepath) {
@@ -160,21 +171,13 @@ impl FileDevice {
                 Err(err) => return Err(format!("No container was found and couldn't create new: {:?}", err))
             };
         }
-        if payload.contains("..") {
+        let paths = urlencoding::decode(payload).map_err(|_| { format!("Couldn't decode payload: `{}`", payload) })?.to_string();
+        if paths.contains("..") {
             return Err("Bad request".to_string());
         }
-        let full_path = format!("{}/{}", filepath, payload);
-        let entries = match fs::read_dir(&full_path) {
-            Ok(f) => f,
-            Err(e) => return Err(format!("Error on opening the directory: {:?}", e))
-        };
-
-        Ok(json!({
-            "template": "file_device.hbs",
-            "prepath": payload,
-            "prepath_fx": payload.replace("/", "%2F"),
-            "username": username,
-            "entries": entries.filter(|x| x.is_ok()).map(|x| {
+        let full_path = format!("{}/{}", filepath, paths);
+        let mut entries: Vec<jsVal> = match fs::read_dir(&full_path) {
+            Ok(f) => f.filter(|x| x.is_ok()).map(|x| {
                 match x {
                     Ok(d) => {
                         if d.path().is_file() {
@@ -183,21 +186,45 @@ impl FileDevice {
                                 "filename": d.file_name().to_string_lossy()
                             })
                         } else {
+                            let fname = d.file_name().to_string_lossy().to_string();
                             json!({
-                                "dirname": d.file_name().to_string_lossy().to_string()
+                                "full_path": urlencoding::encode(&format!("{}/{}", paths, fname)),
+                                "display": fname,
                             })
                         }
                     }
                     Err(_) => json!({}),
                 }
-            }).collect::<jsVal>()
+            }).collect::<Vec<jsVal>>(),
+            Err(e) => return Err(format!("Error on opening the directory: {:?}", e))
+        };
+        entries.insert(0, json!({
+                                "full_path": &paths,
+                                "display": "."
+                            }));
+        let last = paths.rfind("/");
+        if last.is_some() {
+            entries.insert(1, json!({
+                                "full_path": &paths[..last.unwrap()],
+                                "display": ".."
+                            }));
+        }
+
+
+        Ok(json!({
+            "template": "file_device.hbs",
+            "prepath": paths,
+            "prepath_fx": payload,
+            "username": username,
+            "entries": entries
         }))
     }
 
     fn create_dir(&self, username: &str, payload: &str) -> Result<jsVal, String> {
         let filepath = format!("{}/{}", &self.storage, username);
-        debug!("Create {}/{}", filepath, payload);
-        match fs::create_dir_all(format!("{}/{}", filepath, payload)) {
+        let paths = urlencoding::decode(payload).map_err(|_| { format!("Couldn't decode payload: `{}`", payload) })?.to_string();
+        debug!("Create {}/{}", filepath, paths);
+        match fs::create_dir_all(format!("{}/{}", filepath, paths)) {
             Ok(_) => return Ok(match self.get_list(username, payload) {
                 Ok(r) => r,
                 Err(e) => return Err(format!("Error on getting list after created the dir: {}", e))

@@ -150,14 +150,11 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
     };
     let stat_files = FileCache::new();
 
-    //let mut config_tls = ServerConfig::new(NoClientAuth::new());
     let cert_file = &mut BufReader::new(File::open("cert.pem").unwrap());
     let key_file = &mut BufReader::new(File::open("key.pem").unwrap());
 
     let cert_chain = rustls_pemfile::certs(cert_file).unwrap();
     let keys = rustls_pemfile::rsa_private_keys(key_file).unwrap();
-
-    //config_tls.set_single_cert(cert_chain, keys.remove(0)).unwrap();
 
     let config_tls = ServerConfig::builder()
         .with_safe_defaults()
@@ -167,11 +164,6 @@ pub async fn run_server(a_config: Arc<Mutex<Config>>) {
 
     HttpServer::new(move || {
         App::new()
-            /*.wrap(SessionMiddleware::new(
-                Cook::new("127.0.0.1:6379"),
-                signing_key.clone(),
-            ))*/
-            // enable logger - always register actix-web Logger middleware last
             .wrap(middleware::DefaultHeaders::new().add(("X-Version", "0.2")))
             .wrap(middleware::Logger::new("%T sec  from %a `%r` -> `%s` %b `%{Referer}i` `%{User-Agent}i`"))
             .wrap(middleware::Compress::default())

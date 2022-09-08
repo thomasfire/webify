@@ -21,6 +21,7 @@ use serde_json::Value as jsVal;
 use serde_json::json;
 use actix_multipart::Multipart;
 use log::{debug, error, warn, trace};
+use urlencoding;
 
 use std::sync::Arc;
 use std::collections::BTreeMap;
@@ -317,7 +318,7 @@ pub async fn file_sender(req: HttpRequest, info: web::Path<String>, mdata: web::
         }
     };
 
-    let file_data = match mdata.get_file_from_filer(&user, &info.as_str().replace("%2F", "/")) {
+    let file_data = match mdata.get_file_from_filer(&user, &info.as_str()) {
         Ok(d) => d,
         Err(e) => {
             error!("Error on getting the file: {}", e);
@@ -333,11 +334,13 @@ pub async fn file_sender(req: HttpRequest, info: web::Path<String>, mdata: web::
             }
         }
     };
-
+    let paths = urlencoding::decode(info.as_str())
+        .map_err(|_| { error::ErrorBadRequest(format!("Cannot decode directory: `{}`", &info.to_string())) })?
+        .to_string();
     debug!("File size: {}", file_data.len());
     Ok(HttpResponse::Ok().insert_header((http::header::CONTENT_TYPE, "multipart/form-data"))
         .insert_header((http::header::CONTENT_LENGTH, file_data.len()))
-        .insert_header((http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", info.as_str().split("%2F").collect::<Vec<&str>>().pop().unwrap_or("some_file"))))
+        .insert_header((http::header::CONTENT_DISPOSITION, format!("filename=\"{}\"", paths.split("/").collect::<Vec<&str>>().pop().unwrap_or("some_file"))))
         .body(file_data))
 }
 
@@ -412,11 +415,19 @@ pub async fn uploader(req: HttpRequest, mut multipart: Multipart, mdata: web::Da
             Err(e) => return Err(error::ErrorBadRequest(format!("Bad item: {:?}", e)))
         };
         let file_path_string = match field.content_disposition().get_filename() {
-            Some(filename) => filename.replace(' ', "_").to_string(),
+            Some(filename) => urlencoding::decode(filename)
+                .map_err(|_| { error::ErrorBadRequest(format!("Cannot decode filename: `{}`", filename)) })?
+                .to_string(),
             None => return Err(error::ErrorBadRequest("No filename in content-disposition"))
         };
-        let directory = info.to_string().replace("%2F", "/");
+        let directory = urlencoding::decode(&info.to_string())
+            .map_err(|_| { error::ErrorBadRequest(format!("Cannot decode directory: `{}`", &info.to_string())) })?
+            .to_string();
         let full_path = format!("{}/{}", directory, file_path_string);
+
+        if full_path.contains("..") {
+            return Err(error::ErrorForbidden("Forbidden path"));
+        }
 
         // Field in turn is stream of *Bytes* object
         while let Some(chunk) = field.next().await {
